@@ -31,6 +31,10 @@ def worker(repeat: int, device: str, args: argparse.Namespace):
     else:
         raise ValueError('Unrecognised resume-mode.')
 
+    if resume_data.current_steps > args.total_steps or resume_data.current_episodes >= args.total_episodes:
+        print('Repeat already complete.')
+        return
+
     args.agent_location = resume_data.model_paths
 
     # Configure env + agents

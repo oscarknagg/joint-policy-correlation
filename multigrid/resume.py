@@ -59,7 +59,7 @@ class Resume(ABC):
 
         # This operator is XOR. I know, I hadn't used this in python myself
         if logs_found ^ models_found:
-            raise RuntimeError('logs_found={}, models_found={}.'.format(logs_found, models_found))
+            raise RuntimeError('Repeat {}: logs_found={}, models_found={}.'.format(repeat, logs_found, models_found))
         elif logs_found and models_found:
             msg = build_resume_message(num_completed_steps, args.total_steps, num_completed_episodes,
                                        args.total_episodes, log_file, model_files)
@@ -75,6 +75,28 @@ class Resume(ABC):
         )
 
 
+def get_latest_complete_set_of_models(n_models: int, repeat: int, checkpoint_models: List[dict]):
+    """This handles the edge case where a training exited after saving only 1 of N models.
+
+    In this case we want to restart from the last checkpoint which has all N models.
+    """
+    max_steps = max(checkpoint_models, key=lambda x: x['steps'])['steps']
+
+    latest_models = [f['filepath'] for f in checkpoint_models if f['steps'] == max_steps]
+
+    if len(latest_models) == n_models:
+        return latest_models
+    elif len(latest_models) < n_models:
+        # Trim the incomplete models and try again
+        # Recursion flex
+        checkpoint_models = [i for i in checkpoint_models if f['steps'] < max_steps]
+        return get_latest_complete_set_of_models(n_models, repeat, checkpoint_models)
+    else:
+        # More models than expected, somethings really wrong
+        raise RuntimeError('Model resuming found more models than expected!'
+                           'Expected = {}, Found = {}'.format(n_models, len(latest_models)))
+
+
 class LocalResume(Resume):
     @staticmethod
     def _resume_models(args: Namespace, repeat: int):
@@ -84,17 +106,20 @@ class LocalResume(Resume):
             for root, _, files in os.walk(f'{PATH}/experiments/{args.save_folder}/models/'):
                 for f in sorted(files):
                     model_args = {i.split('=')[0]: i.split('=')[1] for i in f[:-3].split('__')}
-                    checkpoint_models.append({
-                        'species': int(model_args['species']),
-                        'steps': float(model_args['steps']),
-                        'repeat': int(model_args['repeat']),
-                        'filepath': f
-                    })
+                    if int(model_args['repeat']) == repeat:
+                        checkpoint_models.append({
+                            'species': int(model_args['species']),
+                            'steps': float(model_args['steps']),
+                            'repeat': int(model_args['repeat']),
+                            'filepath': f
+                        })
 
-            max_steps = max(checkpoint_models, key=lambda x: x['steps'])['steps']
+            if not checkpoint_models:
+                # No models found
+                return False, []
 
-            latest_models = [os.path.join(root, f['filepath']) for f in checkpoint_models
-                             if f['steps'] == max_steps and f['repeat'] == repeat]
+            latest_models = get_latest_complete_set_of_models(args.n_species, repeat, checkpoint_models)
+            latest_models = [os.path.join(root, f) for f in latest_models]
             args.agent_location = latest_models
             return bool(latest_models), latest_models
         else:
@@ -163,20 +188,21 @@ class S3Resume(Resume):
             for key in object_query['Contents']:
                 f = key['Key'].split('/')[-1]
                 model_args = {i.split('=')[0]: i.split('=')[1] for i in f[:-3].split('__')}
-                # checkpoint_models.append((int(model_args['species']), float(model_args['steps']), f))
-                checkpoint_models.append({
-                    'species': int(model_args['species']),
-                    'steps': float(model_args['steps']),
-                    'repeat': int(model_args['repeat']),
-                    'filepath': f
-                })
+                if int(model_args['repeat']) == repeat:
+                    checkpoint_models.append({
+                        'species': int(model_args['species']),
+                        'steps': float(model_args['steps']),
+                        'repeat': int(model_args['repeat']),
+                        'filepath': f
+                    })
 
-            max_steps = max(checkpoint_models, key=lambda x: x[1])[1]
+            if not checkpoint_models:
+                # No models found
+                return False, []
 
-            latest_models = [f's3://{args.s3_bucket}/{args.save_folder}/models/{f["filepath"]}'
-                             for f in checkpoint_models
-                             if f['steps'] == max_steps and f['repeat'] == repeat]
-
+            latest_models = get_latest_complete_set_of_models(args.n_species, repeat, checkpoint_models)
+            latest_models = [f's3://{args.s3_bucket}/{args.save_folder}/models/{f}' for f in latest_models]
+            args.agent_location = latest_models
             return bool(latest_models), latest_models
         else:
             return False, []
@@ -185,35 +211,31 @@ class S3Resume(Resume):
 """
 These two resume methods can be tested with the following commands:
 
-# S3 resuming
-# 1. Start very quick experiment from scratch
-python main.py --env laser --n-envs 1 --n-agents 2 --n-species 2 --height 9 --width 9 \
-    --total-steps 20 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
+# Local resume multi-repeats
+python main.py --env laser --n-envs 128 --n-agents 2 --n-species 2 --height 9 --width 9 \
+    --total-steps 0.004e6 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
     --obs-rotate True --obs-in-front 11 --obs-side 6 --obs-behind 2 \
-    --laser-tag-map small2 --save-folder test --repeat 0 \
+    --laser-tag-map small2 --save-folder test-multi-repeats --n-repeats 4 --n-processes 1 \
+    --model-interval 10
+
+python main.py --env laser --n-envs 128 --n-agents 2 --n-species 2 --height 9 --width 9 \
+    --total-steps 0.006e6 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
+    --obs-rotate True --obs-in-front 11 --obs-side 6 --obs-behind 2 \
+    --laser-tag-map small2 --save-folder test-multi-repeats --n-repeats 4 --n-processes 1 \
+    --model-interval 10
+
+
+# S3 resume multi-repeats
+python main.py --env laser --n-envs 128 --n-agents 2 --n-species 2 --height 9 --width 9 \
+    --total-steps 0.004e6 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
+    --obs-rotate True --obs-in-front 11 --obs-side 6 --obs-behind 2 \
+    --laser-tag-map small2 --save-folder test-multi-repeats --n-repeats 4 --n-processes 1 \
     --s3-bucket oscarknagg-experiments --s3-interval 10 --model-interval 10 --resume-mode s3
 
-# 2. Run same experiment with a greater `total-steps`
-python main.py --env laser --n-envs 1 --n-agents 2 --n-species 2 --height 9 --width 9 \
-    --total-steps 40 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
+python main.py --env laser --n-envs 128 --n-agents 2 --n-species 2 --height 9 --width 9 \
+    --total-steps 0.006e6 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
     --obs-rotate True --obs-in-front 11 --obs-side 6 --obs-behind 2 \
-    --laser-tag-map small2 --save-folder test --repeat 0 \
+    --laser-tag-map small2 --save-folder test-multi-repeats --n-repeats 4 --n-processes 1 \
     --s3-bucket oscarknagg-experiments --s3-interval 10 --model-interval 10 --resume-mode s3
-
-
-# Local resuming
-# 1. Start very quick experiment from scratch
-python main.py --env laser --n-envs 1 --n-agents 2 --n-species 2 --height 9 --width 9 \
-    --total-steps 20 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
-    --obs-rotate True --obs-in-front 11 --obs-side 6 --obs-behind 2 \
-    --laser-tag-map small2 --save-folder test-local --repeat 0 \
-    --model-interval 10 --resume-mode local
-
-# 2. Run same experiment with a greater `total-steps`
-python main.py --env laser --n-envs 1 --n-agents 2 --n-species 2 --height 9 --width 9 \
-    --total-steps 40 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
-    --obs-rotate True --obs-in-front 11 --obs-side 6 --obs-behind 2 \
-    --laser-tag-map small2 --save-folder test-local --repeat 0 \
-    --model-interval 10 --resume-mode local
 
 """
