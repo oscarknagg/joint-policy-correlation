@@ -1,11 +1,13 @@
 import argparse
-from torch import nn
-from typing import List
+from torch import nn, optim
+from typing import List, Optional
 import os
 import torch
 
 from multigrid.envs import LaserTag, Slither
 from multigrid.envs.laser_tag.map_generators import MapFromString, MapPool
+from multigrid.observations import ObservationFunction
+from multigrid import rl
 from multigrid import utils
 from multigrid import agents
 from config import PATH, INPUT_CHANNELS
@@ -25,7 +27,9 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPa
     parser.add_argument('--warm-start', default=0, type=int)
     parser.add_argument('--device', default='cuda', type=str)
     parser.add_argument('--dtype', type=str, default='float')
-    parser.add_argument('--repeat', default=None, type=int, help='Repeat number')
+    parser.add_argument('--repeat', default=None, type=int, help='Repeat number if running a single repeat.')
+    parser.add_argument('--n-repeats', default=None, type=int, help='Number of repeats to run')
+    parser.add_argument('--n-processes', default=1, type=int)
     parser.add_argument('--resume-mode', default='local', type=str)
     return parser
 
@@ -112,7 +116,7 @@ def add_output_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPa
     return parser
 
 
-def get_env(args: argparse.Namespace, observation_fn):
+def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, device: str):
     if args.env is None:
         raise ValueError('args.env is None.')
     render_args = {
@@ -122,21 +126,21 @@ def get_env(args: argparse.Namespace, observation_fn):
     }
     if args.env == 'snake':
         env = Slither(num_envs=args.n_envs, num_agents=args.n_agents, food_on_death_prob=args.food_on_death,
-                      height=args.height, width=args.width, device=args.device, render_args=render_args,
+                      height=args.height, width=args.width, device=device, render_args=render_args,
                       boost=args.boost,
                       boost_cost_prob=args.boost_cost, food_rate=args.food_rate,
                       respawn_mode=args.respawn_mode, food_mode=args.food_mode, observation_fn=observation_fn,
                       reward_on_death=args.reward_on_death, agent_colours=args.colour_mode)
     elif args.env == 'laser':
         if len(args.laser_tag_map) == 1:
-            map_generator = MapFromString(args.laser_tag_map[0], args.device)
+            map_generator = MapFromString(args.laser_tag_map[0], device)
         else:
-            fixed_maps = [MapFromString(m, args.device) for m in args.laser_tag_map]
+            fixed_maps = [MapFromString(m, device) for m in args.laser_tag_map]
             map_generator = MapPool(fixed_maps)
 
         env = LaserTag(num_envs=args.n_envs, num_agents=args.n_agents, height=args.height, width=args.width,
                        observation_fn=observation_fn, colour_mode=args.colour_mode,
-                       map_generator=map_generator, device=args.device, render_args=render_args)
+                       map_generator=map_generator, device=device, render_args=render_args)
     elif args.env == 'cooperative':
         raise NotImplementedError
     elif args.env == 'asymmetric':
@@ -147,7 +151,7 @@ def get_env(args: argparse.Namespace, observation_fn):
     return env
 
 
-def get_models(args: argparse.Namespace, num_actions: int) -> List[nn.Module]:
+def get_models(args: argparse.Namespace, num_actions: int, device: str) -> List[nn.Module]:
     num_models = args.n_species
 
     # Quick hack to make it easier to input all of the species trained in one particular experiment
@@ -165,7 +169,7 @@ def get_models(args: argparse.Namespace, num_actions: int) -> List[nn.Module]:
     models: List[nn.Module] = []
     for i in range(num_models):
         # Check for existence of model file
-        if args.agent_location is None:
+        if args.agent_location is None or args.agent_location == []:
             specified_model_file = False
         else:
             model_path = args.agent_location[i]
@@ -180,18 +184,18 @@ def get_models(args: argparse.Namespace, num_actions: int) -> List[nn.Module]:
             models.append(
                 agents.ConvAgent(
                     num_actions=num_actions, num_initial_convs=2, in_channels=INPUT_CHANNELS, conv_channels=32,
-                    num_residual_convs=2, num_feedforward=1, feedforward_dim=64).to(device=args.device,
+                    num_residual_convs=2, num_feedforward=1, feedforward_dim=64).to(device=device,
                                                                                     dtype=args.dtype)
             )
         elif args.agent_type == 'gru':
             models.append(
                 agents.GRUAgent(
                     num_actions=num_actions, num_initial_convs=2, in_channels=INPUT_CHANNELS, conv_channels=32,
-                    num_residual_convs=2, num_feedforward=1, feedforward_dim=64).to(device=args.device,
+                    num_residual_convs=2, num_feedforward=1, feedforward_dim=64).to(device=device,
                                                                                     dtype=args.dtype)
             )
         elif args.agent_type == 'random':
-            models.append(agents.RandomAgent(num_actions=num_actions, device=args.device))
+            models.append(agents.RandomAgent(num_actions=num_actions, device=device))
         else:
             raise ValueError('Unrecognised agent type.')
 
@@ -213,3 +217,53 @@ def get_models(args: argparse.Namespace, num_actions: int) -> List[nn.Module]:
                 param.requires_grad = False
 
     return models
+
+
+def get_trainers(args: argparse.Namespace, models: List[nn.Module]) -> Optional[rl.core.MultiAgentTrainer]:
+    if args.train:
+        if args.train_algo == 'a2c':
+            a2c_trainers = []
+            for i, m in enumerate(models):
+                a2c_trainers.append(
+                    rl.A2CTrainer(
+                        agent_id=f'agent_{i}',
+                        model=m,
+                        update_steps=args.update_steps,
+                        optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=0),
+                        a2c=rl.ActorCritic(gamma=args.gamma, normalise_returns=args.norm_returns, dtype=args.dtype,
+                                           use_gae=args.gae_lambda is not None, gae_lambda=args.gae_lambda),
+                        max_grad_norm=args.max_grad_norm,
+                        value_loss_coeff=args.value_loss_coeff,
+                        entropy_loss_coeff=args.entropy,
+                        mask_dones=args.mask_dones
+                    )
+                )
+            rl_trainer = rl.core.IndependentTrainer(a2c_trainers)
+        elif args.train_algo == 'ppo':
+            ppo_trainers = []
+            for i, m in enumerate(models):
+                ppo_trainers.append(
+                    rl.PPOTrainer(
+                        agent_id=f'agent_{i}',
+                        model=m,
+                        update_steps=args.update_steps,
+                        optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=0),
+                        a2c=rl.ActorCritic(gamma=args.gamma, normalise_returns=args.norm_returns, dtype=args.dtype,
+                                           use_gae=args.gae_lambda is not None, gae_lambda=args.gae_lambda),
+                        max_grad_norm=args.max_grad_norm,
+                        value_loss_coeff=args.value_loss_coeff,
+                        entropy_loss_coeff=args.entropy,
+                        mask_dones=args.mask_dones,
+                        # PPO specific arguments
+                        batch_size=args.ppo_batch,
+                        epochs=args.ppo_epochs,
+                        eta_clip=args.ppo_eta_clip,
+                    )
+                )
+            rl_trainer = rl.core.IndependentTrainer(ppo_trainers)
+        else:
+            raise ValueError('Unrecognised algorithm.')
+    else:
+        rl_trainer = None
+
+    return rl_trainer

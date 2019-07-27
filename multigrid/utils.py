@@ -293,6 +293,17 @@ def rotate_image_batch(img: torch.Tensor, degree: int = 0) -> torch.Tensor:
     return rot
 
 
+def json_safe(d: dict) -> dict:
+    safe_dict = {}
+    for k, v in d.items():
+        if isinstance(v, torch.dtype):
+            safe_dict[k] = str(v)
+        else:
+            safe_dict[k] = v
+
+    return safe_dict
+
+
 def get_comment(args) -> str:
     """Gets a verbose comment to add at the top of a CSV log file.
 
@@ -301,12 +312,7 @@ def get_comment(args) -> str:
     """
     repo = git.Repo(search_parent_directories=True)
     sha = repo.head.object.hexsha
-    argsdict = {}
-    for k, v in args.__dict__.items():
-        if isinstance(v, torch.dtype):
-            argsdict[k] = str(v)
-        else:
-            argsdict[k] = v
+    argsdict = json_safe(args.__dict__)
 
     comment = f'Git commit: {sha}\n'
     comment += f'Args: {json.dumps(argsdict)}\n'

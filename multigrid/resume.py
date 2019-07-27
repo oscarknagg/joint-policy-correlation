@@ -45,21 +45,21 @@ class Resume(ABC):
     """Abstract for classes that handle resuming experiments from a checkpoint."""
     @staticmethod
     @abstractmethod
-    def _resume_models(args: Namespace):
+    def _resume_models(args: Namespace, repeat: int):
         raise NotImplementedError
 
     @staticmethod
     @abstractmethod
-    def _resume_log(args: Namespace, save_file: str):
+    def _resume_log(args: Namespace, repeat: int):
         raise NotImplementedError
 
-    def resume(self, args: Namespace, save_file: str) -> ResumeData:
-        logs_found, log_file, num_completed_steps, num_completed_episodes = self._resume_log(args, save_file)
-        models_found, model_files = self._resume_models(args)
+    def resume(self, args: Namespace, repeat: int) -> ResumeData:
+        logs_found, log_file, num_completed_steps, num_completed_episodes = self._resume_log(args, repeat)
+        models_found, model_files = self._resume_models(args, repeat)
 
         # This operator is XOR. I know, I hadn't used this in python myself
         if logs_found ^ models_found:
-            raise RuntimeError('Found logs but not models or vice versa.')
+            raise RuntimeError('logs_found={}, models_found={}.'.format(logs_found, models_found))
         elif logs_found and models_found:
             msg = build_resume_message(num_completed_steps, args.total_steps, num_completed_episodes,
                                        args.total_episodes, log_file, model_files)
@@ -77,25 +77,32 @@ class Resume(ABC):
 
 class LocalResume(Resume):
     @staticmethod
-    def _resume_models(args: Namespace):
+    def _resume_models(args: Namespace, repeat: int):
         if os.path.exists(f'{PATH}/experiments/{args.save_folder}/models/'):
             # Get latest checkpoint
             checkpoint_models = []
             for root, _, files in os.walk(f'{PATH}/experiments/{args.save_folder}/models/'):
                 for f in sorted(files):
                     model_args = {i.split('=')[0]: i.split('=')[1] for i in f[:-3].split('__')}
-                    checkpoint_models.append((int(model_args['species']), float(model_args['steps']), f))
+                    checkpoint_models.append({
+                        'species': int(model_args['species']),
+                        'steps': float(model_args['steps']),
+                        'repeat': int(model_args['repeat']),
+                        'filepath': f
+                    })
 
-            max_steps = max(checkpoint_models, key=lambda x: x[1])[1]
+            max_steps = max(checkpoint_models, key=lambda x: x['steps'])['steps']
 
-            latest_models = [os.path.join(root, f[2]) for f in checkpoint_models if f[1] == max_steps]
+            latest_models = [os.path.join(root, f['filepath']) for f in checkpoint_models
+                             if f['steps'] == max_steps and f['repeat'] == repeat]
             args.agent_location = latest_models
             return bool(latest_models), latest_models
         else:
-            return False, None
+            return False, []
 
     @staticmethod
-    def _resume_log( args: Namespace, save_file: str):
+    def _resume_log(args: Namespace, repeat: int):
+        save_file = f'repeat={repeat}'
         experiment_folder_exists = os.path.exists(f'{PATH}/experiments/{args.save_folder}')
         repeat_exists = os.path.exists(f'{PATH}/experiments/{args.save_folder}/logs/{save_file}.csv')
         if experiment_folder_exists and repeat_exists:
@@ -113,7 +120,8 @@ class LocalResume(Resume):
 
 class S3Resume(Resume):
     @staticmethod
-    def _resume_log(args: Namespace, save_file: str):
+    def _resume_log(args: Namespace, repeat: int):
+        save_file = f'repeat={repeat}'
         # The easiest way to check if an experiment checkpoint exists is just to try to
         # load it and check for a 404.
         try:
@@ -146,7 +154,7 @@ class S3Resume(Resume):
         return logs_found, f'{PATH}/experiments/{args.save_folder}/logs/{save_file}.csv', num_completed_steps, num_completed_episodes
 
     @staticmethod
-    def _resume_models(args: Namespace):
+    def _resume_models(args: Namespace, repeat: int):
         s3 = boto3.client('s3')
         checkpoint_models = []
         object_query = s3.list_objects(Bucket=args.s3_bucket, Prefix=f'{args.save_folder}/models/')
@@ -155,16 +163,23 @@ class S3Resume(Resume):
             for key in object_query['Contents']:
                 f = key['Key'].split('/')[-1]
                 model_args = {i.split('=')[0]: i.split('=')[1] for i in f[:-3].split('__')}
-                checkpoint_models.append((int(model_args['species']), float(model_args['steps']), f))
+                # checkpoint_models.append((int(model_args['species']), float(model_args['steps']), f))
+                checkpoint_models.append({
+                    'species': int(model_args['species']),
+                    'steps': float(model_args['steps']),
+                    'repeat': int(model_args['repeat']),
+                    'filepath': f
+                })
 
             max_steps = max(checkpoint_models, key=lambda x: x[1])[1]
 
-            latest_models = [f's3://{args.s3_bucket}/{args.save_folder}/models/{f[2]}' for f in checkpoint_models if
-                             f[1] == max_steps]
+            latest_models = [f's3://{args.s3_bucket}/{args.save_folder}/models/{f["filepath"]}'
+                             for f in checkpoint_models
+                             if f['steps'] == max_steps and f['repeat'] == repeat]
 
             return bool(latest_models), latest_models
         else:
-            return False, None
+            return False, []
 
 
 """
