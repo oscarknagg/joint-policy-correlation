@@ -10,7 +10,7 @@ class TrajectoryStore(object):
         self.clear()
 
     def append(self,
-               state: torch.Tensor = None,
+               obs: torch.Tensor = None,
                action: torch.Tensor = None,
                log_prob: torch.Tensor = None,
                reward: torch.Tensor = None,
@@ -22,8 +22,8 @@ class TrajectoryStore(object):
 
         Each argument should be a vector of shape (num_envs, 1)
         """
-        if state is not None:
-            self._states.append(state)
+        if obs is not None:
+            self._states.append(obs)
 
         if action is not None:
             self._actions.append(action)
@@ -57,7 +57,7 @@ class TrajectoryStore(object):
         self._hiddens = []
 
     @property
-    def states(self):
+    def obs(self):
         return torch.stack(self._states)
 
     @property

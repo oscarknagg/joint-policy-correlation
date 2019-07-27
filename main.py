@@ -106,13 +106,27 @@ if args.train:
             )
         rl_trainer = IndependentTrainer(a2c_trainers)
     elif args.train_algo == 'ppo':
-        raise NotImplementedError
-        # rl_trainer = PPOTrainer(models, update_steps=args.update_steps, epochs=args.ppo_epochs,
-        #                         interaction_handler=interaction_handler, lr=args.lr, batch_size=args.ppo_batch,
-        #                         gamma=args.gamma, gae_lambda=args.gae_lambda, eta_clip=args.ppo_eta_clip,
-        #                         max_grad_norm=args.max_grad_norm, value_loss_coeff=args.value_loss_coeff,
-        #                         entropy_loss_coeff=args.entropy, normalise_advantages=args.norm_advantages,
-        #                         mask_dones=args.mask_dones, dtype=args.dtype)
+        ppo_trainers = []
+        for i, m in enumerate(models):
+            ppo_trainers.append(
+                PPOTrainer(
+                    agent_id=f'agent_{i}',
+                    model=m,
+                    update_steps=args.update_steps,
+                    optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=0),
+                    a2c=ActorCritic(gamma=args.gamma, normalise_returns=args.norm_returns, dtype=args.dtype,
+                                    use_gae=args.gae_lambda is not None, gae_lambda=args.gae_lambda),
+                    max_grad_norm=args.max_grad_norm,
+                    value_loss_coeff=args.value_loss_coeff,
+                    entropy_loss_coeff=args.entropy,
+                    mask_dones=args.mask_dones,
+                    # PPO specific arguments
+                    batch_size=args.ppo_batch,
+                    epochs=args.ppo_epochs,
+                    eta_clip=args.ppo_eta_clip,
+                )
+            )
+        rl_trainer = IndependentTrainer(ppo_trainers)
     else:
         raise ValueError('Unrecognised algorithm.')
 else:
