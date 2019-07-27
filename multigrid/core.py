@@ -5,7 +5,6 @@ import torch
 from torch import nn
 from PIL import Image
 from itertools import count
-from gym.envs.classic_control.rendering import SimpleImageViewer
 
 from multigrid.callbacks.core import CallbackList
 from multigrid.rl.core import MultiAgentTrainer, SingleAgentTrainer
@@ -91,6 +90,8 @@ class MultiagentVecEnv(ABC):
 
     def render(self, mode: str = 'human', env: Optional[int] = None) -> Any:
         if self.viewer is None and mode == 'human':
+            # Lazy importing because this breaks EC2 instances that don't have a screen/viewing device
+            from gym.envs.classic_control.rendering import SimpleImageViewer
             self.viewer = SimpleImageViewer(maxwidth=1080)
 
         img = self._get_env_images()
