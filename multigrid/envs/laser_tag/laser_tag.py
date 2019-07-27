@@ -1,8 +1,6 @@
 import torch
 from typing import Dict, Optional, Tuple
-from gym.envs.classic_control import rendering
 import torch.nn.functional as F
-from collections import OrderedDict
 from time import time, sleep
 import warnings
 
