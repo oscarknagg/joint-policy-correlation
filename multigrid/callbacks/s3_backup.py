@@ -4,7 +4,8 @@ import warnings
 from typing import Dict
 import torch
 
-from .core import Callback, Optional
+from .core import Optional
+from multigrid.core import Callback
 
 
 class S3Backup(Callback):

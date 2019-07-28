@@ -4,7 +4,7 @@ from typing import Optional, Dict, List
 import os
 import boto3
 
-from .core import Callback
+from multigrid.core import Callback
 
 
 class ModelCheckpoint(Callback):

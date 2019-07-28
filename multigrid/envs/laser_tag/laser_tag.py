@@ -154,11 +154,7 @@ class LaserTag(MultiagentVecEnv):
         has_moved |= actions == self.move_forward_and_turn_right
         has_moved |= actions == self.move_forward_and_turn_left
         if torch.any(has_moved):
-            t0 = time()
-            # Keep the original positions so we can reset if an agent does a move
-            # that's disallowed by pathing.
-            original_agents = self.agents.clone()
-
+            # Calculate movement directions
             # Default movement is in the orientation direction
             directions = self.orientations.clone()
             # Backwards is reverse of the orientation direction
@@ -169,25 +165,30 @@ class LaserTag(MultiagentVecEnv):
             directions[actions == self.move_left] = directions[actions == self.move_left] + 3
             # Keep in range(4)
             directions.fmod_(4)
-            self.agents[has_moved] = move_pixels(self.agents[has_moved], directions[has_moved])
-            self._log(f'Movement: {1000 * (time() - t0)}ms')
 
-            t0 = time()
-            # Resolve agent-wall pathing
-            overlap = self.pathing.repeat_interleave(self.num_agents, 0) & (self.agents.gt(EPS))
-            reset_due_to_pathing = overlap.view(self.num_envs * self.num_agents, -1).any(dim=1)
-            if torch.any(reset_due_to_pathing):
-                self.agents[reset_due_to_pathing] = original_agents[reset_due_to_pathing]
-            self._log(f'Wall-agent pathing: {1000 * (time() - t0)}ms')
+            resolution_order = torch.randperm(self.num_agents, device=self.device).repeat(self.num_envs)
+            for i_resolve in range(self.num_agents):
+                resolve_these = resolution_order == i_resolve
+                currently_moving = has_moved & resolve_these
 
-            t0 = time()
-            # Resolve agent-agent pathing
-            # TODO: Make one agent in each collision actually do the move
-            overlap = self.agents.gt(EPS) & self._other_agents()
-            reset_due_to_pathing = overlap.view(self.num_envs * self.num_agents, -1).any(dim=1)
-            if torch.any(reset_due_to_pathing):
-                self.agents[reset_due_to_pathing] = original_agents[reset_due_to_pathing]
-            self._log(f'Agent-agent pathing: {1000 * (time() - t0)}ms')
+                if not torch.any(currently_moving):
+                    continue
+
+                # Keep the original positions so we can reset if an agent does a move
+                # that's disallowed by pathing.
+                original_agents = self.agents.clone()
+
+                t0 = time()
+                self.agents[currently_moving] = move_pixels(self.agents[currently_moving], directions[currently_moving])
+                self._log(f'Movement: {1000 * (time() - t0)}ms')
+
+                # Resolve pathing
+                t0 = time()
+                overlap = self.agents.gt(EPS) & (self._other_agents() | self.pathing.repeat_interleave(self.num_agents, 0))
+                reset_due_to_pathing = overlap.view(self.num_envs * self.num_agents, -1).any(dim=1)
+                if torch.any(reset_due_to_pathing):
+                    self.agents[reset_due_to_pathing & currently_moving] = original_agents[reset_due_to_pathing & currently_moving]
+                self._log(f'Agent pathing: {1000 * (time() - t0)}ms')
 
         t0 = time()
         # Update orientations

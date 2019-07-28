@@ -7,6 +7,7 @@ import os
 import torch
 from torch import multiprocessing
 
+import multigrid.core
 from multigrid import callbacks
 from multigrid import core
 from multigrid import arguments
@@ -84,7 +85,7 @@ def worker(repeat: int, device: str, args: argparse.Namespace):
         ) if args.save_heatmap else None,
     ]
     callbacks_to_run = [c for c in callbacks_to_run if c]
-    callback_list = callbacks.CallbackList(callbacks_to_run)
+    callback_list = multigrid.core.CallbackList(callbacks_to_run)
     callback_list.on_train_begin()
     torch.autograd.set_detect_anomaly(True)
     multiagent_run = core.MultiAgentRun(

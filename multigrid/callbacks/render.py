@@ -3,8 +3,7 @@ from torch.distributions import Distribution
 from time import sleep
 import torch
 
-from multigrid.core import MultiagentVecEnv
-from .core import Callback
+from multigrid.core import MultiagentVecEnv, Callback
 
 
 class Render(Callback):

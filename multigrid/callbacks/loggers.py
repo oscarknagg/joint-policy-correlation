@@ -11,9 +11,8 @@ from time import time
 import boto3
 
 from multigrid.utils import ExponentialMovingAverageTracker
-from multigrid.core import MultiagentVecEnv
+from multigrid.core import MultiagentVecEnv, Callback
 from multigrid import envs
-from .core import Callback
 from config import PATH, EPS
 
 

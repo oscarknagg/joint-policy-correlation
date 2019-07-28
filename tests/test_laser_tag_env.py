@@ -14,7 +14,7 @@ from tests._laser_trajectories import expected_laser_trajectories_0_2, expected_
 from config import DEFAULT_DEVICE, PATH
 
 
-render_envs = False
+render_envs = True
 size = 9
 render_sleep = 0.4
 # render_sleep = 1
@@ -113,6 +113,7 @@ class TestLaserTag(unittest.TestCase):
 
         _test_action_sequence(self, env, all_actions)
 
+    @pytest.mark.skip()
     def test_agent_actions(self):
         """Tests a very large number of actions using pretrained agents and checks for environment consistency. This
         complements the random actions test as it tests trajectories that are more likely to occur when training
@@ -261,8 +262,8 @@ class TestLaserTag(unittest.TestCase):
         _test_action_sequence(self, env, all_actions)
 
     def test_move_through_other_agent(self):
-        """If both agents are facing directly toward each other then move forwards they pass through each
-        other - stop this."""
+        """If both agents are facing directly toward each other then attempt to move forwards they should not move
+        anywhere."""
         env = get_test_env(num_envs=1)
         all_actions = {
             'agent_0': torch.tensor([3, 3, 3, 3, 0, 0, 0, 0, 0, 3]).unsqueeze(1).long().to(DEFAULT_DEVICE),
