@@ -27,7 +27,7 @@ class ModelCheckpoint(Callback):
                  save_folder: str,
                  filepath: str,
                  models: List[nn.Module],
-                 interval: Optional[int] = 1000,
+                 interval: Optional[int] = 500000,
                  s3_bucket: Optional[str] = None,
                  s3_filepath: Optional[str] = None):
         super(ModelCheckpoint, self).__init__()
@@ -40,7 +40,8 @@ class ModelCheckpoint(Callback):
 
         os.makedirs(save_folder, exist_ok=True)
 
-        self.i = 0
+        self.last_saved_steps = 0
+        self.num_checkpoints = 0
 
     def after_step(self,
                    logs: Optional[dict],
@@ -48,16 +49,16 @@ class ModelCheckpoint(Callback):
                    rewards: Optional[Dict[str, torch.Tensor]] = None,
                    dones: Optional[Dict[str, torch.Tensor]] = None,
                    infos: Optional[Dict[str, torch.Tensor]] = None):
-        if self.i % self.interval == 0:
+        if (logs['steps'] - self.last_saved_steps) >= self.interval:
+            self.last_saved_steps = self.num_checkpoints*self.interval
+            self.num_checkpoints += 1
+
             for i, model in enumerate(self.models):
                 filepath = self.filepath.format(i_species=i, **logs)
                 torch.save(model.state_dict(), f'{self.save_folder}/{filepath}')
-
                 if self.s3_bucket is not None:
                     boto3.client('s3').upload_file(
                         f'{self.save_folder}/{filepath}',
                         self.s3_bucket,
                         self.s3_filepath.format(i_species=i, **logs)
                     )
-
-        self.i += 1

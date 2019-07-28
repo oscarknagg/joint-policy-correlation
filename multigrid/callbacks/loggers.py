@@ -38,7 +38,7 @@ class CSVLogger(Callback):
                  interval: int = 1,
                  s3_bucket: Optional[str] = None,
                  s3_filename: Optional[str] = None,
-                 s3_interval: int = 1000):
+                 s3_interval: int = 500000):
         super(CSVLogger, self).__init__()
         self.sep = separator
         self.filename = filename
@@ -75,6 +75,8 @@ class CSVLogger(Callback):
                                 **self._open_args)
 
         self.i = 0
+        self.last_s3_push = 0
+        self.num_s3_pushes = 0
 
     def on_train_begin(self):
         def comment_out(s, comment='#'):
@@ -126,7 +128,9 @@ class CSVLogger(Callback):
             self._write(logs)
 
         if self.s3_bucket is not None:
-            if self.i % self.s3_interval:
+            if (logs['steps'] - self.last_s3_push) >= self.s3_interval:
+                self.last_s3_push = self.num_s3_pushes * self.s3_interval
+                self.num_s3_pushes += 1
                 if self.s3_bucket is not None:
                     boto3.client('s3').upload_file(
                         self.filename,

@@ -213,29 +213,31 @@ These two resume methods can be tested with the following commands:
 
 # Local resume multi-repeats
 python main.py --env laser --n-envs 128 --n-agents 2 --n-species 2 --height 9 --width 9 \
-    --total-steps 0.004e6 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
+    --total-steps 3000 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
     --obs-rotate True --obs-in-front 11 --obs-side 6 --obs-behind 2 \
     --laser-tag-map small2 --save-folder test-multi-repeats --n-repeats 4 --n-processes 1 \
-    --model-interval 10
+    --model-interval 1000
 
 python main.py --env laser --n-envs 128 --n-agents 2 --n-species 2 --height 9 --width 9 \
-    --total-steps 0.006e6 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
+    --total-steps 5000 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
     --obs-rotate True --obs-in-front 11 --obs-side 6 --obs-behind 2 \
     --laser-tag-map small2 --save-folder test-multi-repeats --n-repeats 4 --n-processes 1 \
-    --model-interval 10
+    --model-interval 1000
 
 
 # S3 resume multi-repeats
 python main.py --env laser --n-envs 128 --n-agents 2 --n-species 2 --height 9 --width 9 \
-    --total-steps 0.004e6 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
+    --total-steps 3000 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
     --obs-rotate True --obs-in-front 11 --obs-side 6 --obs-behind 2 \
     --laser-tag-map small2 --save-folder test-multi-repeats --n-repeats 4 --n-processes 1 \
-    --s3-bucket oscarknagg-experiments --s3-interval 10 --model-interval 10 --resume-mode s3
+    --s3-bucket oscarknagg-experiments --s3-interval 1000 --model-interval 1000 --resume-mode s3
 
 python main.py --env laser --n-envs 128 --n-agents 2 --n-species 2 --height 9 --width 9 \
-    --total-steps 0.006e6 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
+    --total-steps 5000 --agent-type gru --entropy 0.01 --lr 5e-4 --gamma 0.99 --mask-dones True \
     --obs-rotate True --obs-in-front 11 --obs-side 6 --obs-behind 2 \
     --laser-tag-map small2 --save-folder test-multi-repeats --n-repeats 4 --n-processes 1 \
-    --s3-bucket oscarknagg-experiments --s3-interval 10 --model-interval 10 --resume-mode s3
+    --s3-bucket oscarknagg-experiments --s3-interval 10000 --model-interval 1000 --resume-mode s3
+
+
 
 """
