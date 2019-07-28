@@ -48,6 +48,8 @@ class PPOTrainer(SingleAgentTrainer):
         self.trajectories = TrajectoryStore()
         self.i = 0
 
+        self.value_loss_clipping = True
+
     def _generate_batches(self, *tensors: torch.Tensor):
         num_envs = tensors[0].shape[1]
 
@@ -120,7 +122,13 @@ class PPOTrainer(SingleAgentTrainer):
                     new_action_log_probs = Categorical(action_probabilities).log_prob(actions_batch)
                     new_entropies = Categorical(action_probabilities).entropy()
 
-                    value_loss = self.value_loss_fn(new_values, returns_batch).mean()
+                    if self.value_loss_clipping:
+                        clipped_values = values_batch + (new_values - values_batch).clamp(
+                            -self.eta_clip, self.eta_clip)
+                        value_loss = torch.max(self.value_loss_fn(new_values, returns_batch),
+                                               self.value_loss_fn(clipped_values, returns_batch)).mean()
+                    else:
+                        value_loss = self.value_loss_fn(new_values, returns_batch).mean()
                     advantages = returns_batch - values_batch
                     policy_loss = - (advantages_batch.detach() * old_logs_probs_batch).mean()
                     # policy_loss = - (advantages_batch.detach() * new_action_log_probs).mean()
