@@ -124,7 +124,7 @@ class PPOTrainer(SingleAgentTrainer):
                     advantages = returns_batch - values_batch
                     policy_loss = - (advantages_batch.detach() * old_logs_probs_batch).mean()
                     # policy_loss = - (advantages_batch.detach() * new_action_log_probs).mean()
-                    entropy_loss = - entropies_batch.mean()
+                    entropy_loss = - new_entropies.mean()
 
                     # # Vanilla A2C
                     # returns = self.a2c.returns(
