@@ -116,9 +116,14 @@ class PPOTrainer(SingleAgentTrainer):
                     obs_batch, hidden_states_batch, actions_batch, values_batch, returns_batch, old_logs_probs_batch, \
                         advantages_batch, entropies_batch = batch
 
-                    value_loss = self.value_loss_fn(values_batch, returns_batch).mean()
+                    action_probabilities, new_values, _ = self.model(obs_batch, hidden_states_batch)
+                    new_action_log_probs = Categorical(action_probabilities).log_prob(actions_batch)
+                    new_entropies = Categorical(action_probabilities).entropy()
+
+                    value_loss = self.value_loss_fn(new_values, returns_batch).mean()
                     advantages = returns_batch - values_batch
                     policy_loss = - (advantages_batch.detach() * old_logs_probs_batch).mean()
+                    # policy_loss = - (advantages_batch.detach() * new_action_log_probs).mean()
                     entropy_loss = - entropies_batch.mean()
 
                     # # Vanilla A2C
