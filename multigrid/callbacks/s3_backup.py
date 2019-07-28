@@ -1,10 +1,9 @@
 import boto3
 import os
 import warnings
-from typing import Dict
+from typing import Dict, Optional
 import torch
 
-from .core import Optional
 from multigrid.core import Callback
 
 
