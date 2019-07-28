@@ -104,33 +104,35 @@ class PPOTrainer(SingleAgentTrainer):
                     self.trajectories.obs,
                     self.trajectories.hidden_state.detach(),
                     self.trajectories.actions.detach(),
-                    self.trajectories.values.detach(),
-                    # self.trajectories.values,
+                    # self.trajectories.values.detach(),
+                    self.trajectories.values,
                     returns,
-                    self.trajectories.log_probs.detach(),
-                    advantages
+                    # self.trajectories.log_probs.detach(),
+                    self.trajectories.log_probs,
+                    advantages,
+                    self.trajectories.entropies
                 )
                 for batch in data_generator:
                     obs_batch, hidden_states_batch, actions_batch, values_batch, returns_batch, old_logs_probs_batch, \
-                        advantages_batch = batch
+                        advantages_batch, entropies_batch = batch
 
-                    # value_loss = self.value_loss_fn(values_batch, returns_batch).mean()
+                    value_loss = self.value_loss_fn(values_batch, returns_batch).mean()
+                    advantages = returns_batch - values_batch
+                    policy_loss = - (advantages_batch.detach() * old_logs_probs_batch).mean()
+                    entropy_loss = - entropies_batch.mean()
+
+                    # # Vanilla A2C
+                    # returns = self.a2c.returns(
+                    #     bootstrap_values.detach(),
+                    #     self.trajectories.rewards,
+                    #     self.trajectories.values.detach(),
+                    #     self.trajectories.log_probs.detach(),
+                    #     torch.zeros_like(self.trajectories.dones) if self.mask_dones else self.trajectories.dones,
+                    # )
+                    # value_loss = self.value_loss_fn(self.trajectories.values, returns).mean()
                     # advantages = returns - self.trajectories.values
                     # policy_loss = - (advantages.detach() * self.trajectories.log_probs).mean()
                     # entropy_loss = - self.trajectories.entropies.mean()
-
-                    # Vanilla A2C
-                    returns = self.a2c.returns(
-                        bootstrap_values.detach(),
-                        self.trajectories.rewards,
-                        self.trajectories.values.detach(),
-                        self.trajectories.log_probs.detach(),
-                        torch.zeros_like(self.trajectories.dones) if self.mask_dones else self.trajectories.dones,
-                    )
-                    value_loss = self.value_loss_fn(self.trajectories.values, returns).mean()
-                    advantages = returns - self.trajectories.values
-                    policy_loss = - (advantages.detach() * self.trajectories.log_probs).mean()
-                    entropy_loss = - self.trajectories.entropies.mean()
 
                     self.optimizer.zero_grad()
                     loss = self.value_loss_coeff * value_loss + policy_loss + self.entropy_loss_coeff * entropy_loss
