@@ -286,7 +286,7 @@ class LaserTag(MultiagentVecEnv):
                 # Give rewards when an agent kills another agent i.e. when an agents laser overlaps another
                 # agent and it has done = True
                 other_agents_hit = other_agents.gt(EPS) & lasers.gt(EPS)
-                info_hits |= other_agents_hit.view(self.num_envs*self.num_agents, -1).any(dim=-1)
+                info_hits[currently_firing] |= other_agents_hit.view(self.num_envs*self.num_agents, -1).any(dim=-1)[currently_firing]
                 reward = other_agents_hit.view(self.num_envs*self.num_agents, -1).sum(dim=-1).float()
                 # We should only give a reward
                 # for killing  another agent however only one agent can be killed in each firing step (i.e. this

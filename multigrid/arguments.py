@@ -36,7 +36,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPa
 
 def add_training_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument('--diayn', default=0, type=float)
-    parser.add_argument('--value-loss-coeff', default=0.5, type=float)
+    parser.add_argument('--value-loss-coeff', default=1.0, type=float)
     parser.add_argument('--entropy', default=0.01, type=float)
     parser.add_argument('--max-grad-norm', default=0.5, type=float)
     parser.add_argument('--coord-conv', default=True, type=get_bool)
