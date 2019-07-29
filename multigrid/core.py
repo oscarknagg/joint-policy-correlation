@@ -222,9 +222,14 @@ class MultiAgentRun(object):
         for i_step in count(1):
             logs = {}
 
-            interaction = self.interaction_handler.interact(observations, hidden_states, cell_states)
+            interaction, hidden_states, cell_states = self.interaction_handler.interact(observations, hidden_states, cell_states)
             self.callbacks.before_step(logs, interaction.actions, interaction.action_distributions)
 
+            # This a dirty hack
+            # TODO: Alert trajectory storage logic to make this cleaner
+            _old_observations = {k: v.clone() for k, v in observations.items()}
+            _old_hiddens = {k: v.clone() for k, v in hidden_states.items()}
+            _old_cells = {k: v.clone() for k, v in cell_states.items()}
             observations, reward, done, info = self.env.step(interaction.actions)
             self.env.reset(done['__all__'], return_observations=False)
             self.env.check_consistency()
@@ -235,8 +240,8 @@ class MultiAgentRun(object):
                 # Reset hidden states on death or on environment reset
                 for _agent, _done in done.items():
                     if _agent != '__all__':
-                        hidden_states[_agent][done['__all__']|_done].mul_(0)
-                        cell_states[_agent][done['__all__']| _done].mul_(0)
+                        hidden_states[_agent][done['__all__'] |_done].mul_(0)
+                        cell_states[_agent][done['__all__'] | _done].mul_(0)
 
             if not self.train:
                 hidden_states = {k: v.detach() for k, v in hidden_states.items()}
@@ -247,7 +252,8 @@ class MultiAgentRun(object):
             ##########################
             if self.train:
                 self.rl_trainer.train(
-                    interaction, hidden_states, cell_states, logs, observations, reward, done, info
+                    interaction, _old_hiddens, _old_cells, logs, _old_observations, reward, done, info,
+                    observations, hidden_states, cell_states
                 )
 
             self.callbacks.after_step(logs, observations, reward, done, info)

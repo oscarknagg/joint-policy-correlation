@@ -77,10 +77,15 @@ class PPOTrainer(SingleAgentTrainer):
               obs: Optional[Dict[str, torch.Tensor]] = None,
               rewards: Optional[Dict[str, torch.Tensor]] = None,
               dones: Optional[Dict[str, torch.Tensor]] = None,
-              infos: Optional[Dict[str, torch.Tensor]] = None):
+              infos: Optional[Dict[str, torch.Tensor]] = None,
+              current_obs: Optional[Dict[str, torch.Tensor]] = None,
+              current_hiddens: Optional[Dict[str, torch.Tensor]] = None,
+              current_cells: Optional[Dict[str, torch.Tensor]] = None,):
         self.trajectories.append(
             obs=obs[self.agent_id],
-            hidden_state=hidden_states[self.agent_id],
+            # obs=current_obs[self.agent_id],
+            hidden_state=hidden_states[self.agent_id].clone(),
+            # hidden_state=current_hiddens[self.agent_id],
             # action=interaction.actions[self.agent_id].unsqueeze(-1),
             action=interaction.actions[self.agent_id],
             log_prob=interaction.log_probs[self.agent_id].unsqueeze(-1),
@@ -91,7 +96,8 @@ class PPOTrainer(SingleAgentTrainer):
         )
         if self.i % self.update_steps == 0:
             with torch.no_grad():
-                _, bootstrap_values, _ = self.model(obs[self.agent_id], hidden_states[self.agent_id])
+                # _, bootstrap_values, _ = self.model(current_obs[self.agent_id], hidden_states[self.agent_id])
+                _, bootstrap_values, _ = self.model(current_obs[self.agent_id], current_hiddens[self.agent_id])
 
             returns = self.a2c.returns(
                 bootstrap_values.detach(),
@@ -118,7 +124,7 @@ class PPOTrainer(SingleAgentTrainer):
                 )
                 for batch in data_generator:
                     obs_batch, hidden_states_batch, actions_batch, values_batch, returns_batch, old_logs_probs_batch, \
-                        advantages_batch, entropies_batch = batch
+                    advantages_batch, entropies_batch = batch
 
                     action_probabilities, new_values, _ = self.model(obs_batch, hidden_states_batch)
                     new_action_log_probs = Categorical(action_probabilities).log_prob(actions_batch)
@@ -137,20 +143,28 @@ class PPOTrainer(SingleAgentTrainer):
                     policy_loss = - (advantages_batch.detach() * new_action_log_probs.unsqueeze(-1)).mean()
                     entropy_loss = - new_entropies.mean()
 
-                    if self.j == 1:
-                        print(old_logs_probs_batch[:10])
-                        print(new_action_log_probs.unsqueeze(-1)[:10])
-                        print()
-                        print(values_batch[:10])
-                        print(new_values[:10])
-
-                        print(obs_batch.shape, actions_batch.shape)
-                        print(advantages_batch.shape, new_action_log_probs.unsqueeze(-1).shape)
-                        print(old_logs_probs_batch.shape, new_action_log_probs.shape)
-                        print(values_batch.shape, new_values.shape)
-                        exit()
-                    else:
-                        self.j += 1
+                    # if self.j == 1:
+                    #     print('\nlog probs')
+                    #     for old, new in zip(old_logs_probs_batch[:10], new_action_log_probs.unsqueeze(-1)[:10]):
+                    #         print(old.item(), new.item())
+                    #     print('log probs diff 0 ', (old_logs_probs_batch - new_action_log_probs).mean().item())
+                    #     print('log probs diff 1 ', (old_logs_probs_batch[1:] - new_action_log_probs[:-1]).mean().item())
+                    #
+                    #     print('\nvalues')
+                    #     for old, new in zip(values_batch[:10], new_values[:10]):
+                    #         print(old.item(), new.item())
+                    #
+                    #     print('values diff 0 ', (values_batch - new_values).mean().item())
+                    #     print('values diff 1 ', (values_batch[1:] - new_values[:-1]).mean().item())
+                    #
+                    #     print()
+                    #     print(obs_batch.shape, actions_batch.shape)
+                    #     print(advantages_batch.shape, new_action_log_probs.unsqueeze(-1).shape)
+                    #     print(old_logs_probs_batch.shape, new_action_log_probs.unsqueeze(-1).shape)
+                    #     print(values_batch.shape, new_values.shape)
+                    #     exit()
+                    # else:
+                    #     self.j += 1
 
                     # # Vanilla A2C
                     # returns = self.a2c.returns(
@@ -173,7 +187,9 @@ class PPOTrainer(SingleAgentTrainer):
 
             self.trajectories.clear()
             hidden_states[self.agent_id] = hidden_states[self.agent_id].detach()
+            current_hiddens[self.agent_id] = current_hiddens[self.agent_id].detach()
             cell_states[self.agent_id] = cell_states[self.agent_id].detach()
+            current_cells[self.agent_id] = current_cells[self.agent_id].detach()
 
         self.i = (self.i + 1) % self.update_steps
 
