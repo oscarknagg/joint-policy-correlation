@@ -12,6 +12,7 @@ from .trajectory_store import TrajectoryStore
 from multigrid.interaction import Interaction, InteractionHandler
 from multigrid import utils
 
+
 class PPOTrainer(SingleAgentTrainer):
     def __init__(self,
                  agent_id: str,
@@ -47,6 +48,7 @@ class PPOTrainer(SingleAgentTrainer):
 
         self.trajectories = TrajectoryStore()
         self.i = 0
+        self.j = 0
 
         self.value_loss_clipping = True
 
@@ -79,14 +81,14 @@ class PPOTrainer(SingleAgentTrainer):
         self.trajectories.append(
             obs=obs[self.agent_id],
             hidden_state=hidden_states[self.agent_id],
-            action=interaction.actions[self.agent_id].unsqueeze(-1),
+            # action=interaction.actions[self.agent_id].unsqueeze(-1),
+            action=interaction.actions[self.agent_id],
             log_prob=interaction.log_probs[self.agent_id].unsqueeze(-1),
             value=interaction.state_values[self.agent_id],
             reward=rewards[self.agent_id].unsqueeze(-1),
             done=dones[self.agent_id].unsqueeze(-1),
             entropy=interaction.action_distributions[self.agent_id].entropy().unsqueeze(-1)
         )
-
         if self.i % self.update_steps == 0:
             with torch.no_grad():
                 _, bootstrap_values, _ = self.model(obs[self.agent_id], hidden_states[self.agent_id])
@@ -129,10 +131,26 @@ class PPOTrainer(SingleAgentTrainer):
                                                self.value_loss_fn(clipped_values, returns_batch)).mean()
                     else:
                         value_loss = self.value_loss_fn(new_values, returns_batch).mean()
+
                     advantages = returns_batch - values_batch
-                    policy_loss = - (advantages_batch.detach() * old_logs_probs_batch).mean()
-                    # policy_loss = - (advantages_batch.detach() * new_action_log_probs).mean()
+                    # policy_loss = - (advantages_batch.detach() * old_logs_probs_batch).mean()
+                    policy_loss = - (advantages_batch.detach() * new_action_log_probs.unsqueeze(-1)).mean()
                     entropy_loss = - new_entropies.mean()
+
+                    if self.j == 1:
+                        print(old_logs_probs_batch[:10])
+                        print(new_action_log_probs.unsqueeze(-1)[:10])
+                        print()
+                        print(values_batch[:10])
+                        print(new_values[:10])
+
+                        print(obs_batch.shape, actions_batch.shape)
+                        print(advantages_batch.shape, new_action_log_probs.unsqueeze(-1).shape)
+                        print(old_logs_probs_batch.shape, new_action_log_probs.shape)
+                        print(values_batch.shape, new_values.shape)
+                        exit()
+                    else:
+                        self.j += 1
 
                     # # Vanilla A2C
                     # returns = self.a2c.returns(
@@ -270,15 +288,11 @@ class _PPOTrainer(SingleAgentTrainer):
                     surr1 = ratio * advantages_batch.detach()
                     surr2 = torch.clamp(ratio, 1.0 - self.eta_clip, 1.0 + self.eta_clip) * advantages_batch.detach()
                     policy_loss = -torch.min(surr1, surr2).mean()
-                    # No trust region
-                    # policy_loss = - (new_action_log_probs * advantages_batch.detach()).mean()
 
                     clipped_values = values_batch + (new_values - values_batch).clamp(
                         -self.eta_clip, self.eta_clip)
                     value_loss = torch.max(self.value_loss_fn(new_values, returns_batch),
                                            self.value_loss_fn(clipped_values, returns_batch)).mean()
-                    # # No value loss clipping
-                    # value_loss = self.value_loss_fn(new_values, returns_batch)
 
                     entropy_loss = - new_entropies.mean()
 
