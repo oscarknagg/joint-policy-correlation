@@ -17,7 +17,7 @@ class Interaction(NamedTuple):
 class InteractionHandler(ABC):
     """Interface for interaction of multiple agents with an environment."""
     @abstractmethod
-    def interact(self, observations: Dict[str, Tensor], cx: Dict[str, Tensor], hx: Dict[str, Tensor]) -> Interaction:
+    def interact(self, observations: Dict[str, Tensor], cx: Dict[str, Tensor], hx: Dict[str, Tensor]) -> (Interaction, Dict[str, Tensor], Dict[str, Tensor]):
         """
 
 
@@ -61,7 +61,7 @@ class MultiSpeciesHandler(InteractionHandler):
     def interact(self,
                  observations: Dict[str, Tensor],
                  hx: Optional[Dict[str, Tensor]],
-                 cx: Optional[Dict[str, Tensor]]) -> Interaction:
+                 cx: Optional[Dict[str, Tensor]]) -> (Interaction, Dict[str, Tensor], Dict[str, Tensor]):
         action_distributions = {}
         actions = {}
         values = {}
@@ -89,4 +89,4 @@ class MultiSpeciesHandler(InteractionHandler):
             log_probs=log_probs
         )
 
-        return interaction
+        return interaction, hx, cx
