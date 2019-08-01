@@ -17,6 +17,17 @@ def get_bool(input_string: str) -> bool:
     return input_string.lower()[0] == 't'
 
 
+def get_dtype(dtype) -> torch.dtype:
+    if dtype == 'float':
+        dtype = torch.float
+    elif dtype == 'half':
+        dtype = torch.half
+    else:
+        raise ValueError('Unrecognised data type.')
+
+    return dtype
+
+
 def add_common_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument('--env', type=str)
     parser.add_argument('--n-envs', type=int)

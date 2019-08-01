@@ -125,12 +125,7 @@ if __name__ == '__main__':
         with open(f'{PATH}/experiments/{args.save_folder}/args.txt', 'w') as f:
             print('python ' + ' '.join(sys.argv[1:]), file=f)
 
-    if args.dtype == 'float':
-        args.dtype = torch.float
-    elif args.dtype == 'half':
-        args.dtype = torch.half
-    else:
-        raise RuntimeError
+    args.dtype = arguments.get_dtype(args.dtype)
 
     if args.repeat is not None and args.n_repeats is not None:
         raise ValueError('Can\'t specify both the number of repeats and a particular repeat number')
