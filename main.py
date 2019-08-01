@@ -145,7 +145,7 @@ if __name__ == '__main__':
         # Assuming multi GPU training here
         devices = [f'cuda:{i}' for i in list(range(n_gpus)) * math.ceil(len(repeats) / n_gpus)][:len(repeats)]
 
-    pool = multiprocessing.Pool(args.n_processes)
+    pool = multiprocessing.Pool(args.n_processes, maxtasksperchild=1)
     worker_args = [(r, d, a) for r, d, a in zip(repeats, devices, [args, ]*args.n_repeats)]
     print([(r, d) for r, d, _ in worker_args])
     try:
