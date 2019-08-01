@@ -333,7 +333,7 @@ class LaserTag(MultiagentVecEnv):
         """
         t0 = time()
         n = agents.size(0)
-        coords = get_coords(agents)
+        coords = get_coords(agents).to(self.device)
         lasers = torch.ones((n, 1, self.height, self.width), dtype=torch.uint8,
                             device=self.device)
 
