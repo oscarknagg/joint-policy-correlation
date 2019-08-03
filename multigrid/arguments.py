@@ -5,7 +5,8 @@ import os
 import torch
 
 from multigrid.envs import LaserTag, Slither
-from multigrid.envs.laser_tag.map_generators import MapFromString, MapPool
+from multigrid.envs.laser_tag.map_generators import MapFromString, MapPool, generate_random_mazes, \
+    generate_random_respawns, FixedMapGenerator, Random
 from multigrid.observations import ObservationFunction
 from multigrid import rl
 from multigrid import utils
@@ -99,6 +100,11 @@ def add_snake_env_arguments(parser: argparse.ArgumentParser) -> argparse.Argumen
 
 def add_laser_tag_env_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument('--laser-tag-map', nargs='+', type=str, default='random')
+    # Random map generation arguments
+    parser.add_argument('--maze-complexity', type=float)
+    parser.add_argument('--maze-density', type=float)
+    parser.add_argument('--n-respawns', type=int)
+    parser.add_argument('--n-maps', type=int)
     return parser
 
 
@@ -144,7 +150,13 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
                       reward_on_death=args.reward_on_death, agent_colours=args.colour_mode)
     elif args.env == 'laser':
         if len(args.laser_tag_map) == 1:
-            map_generator = MapFromString(args.laser_tag_map[0], device)
+            if args.laser_tag_map[0] == 'random':
+                # Generate n_maps random mazes to select from at random during each map reset
+                map_generator = Random(args.n_maps, args.n_respawns, args.height, args.width, args.maze_complexity,
+                                       args.maze_density, args.device)
+            else:
+                # Single fixed map
+                map_generator = MapFromString(args.laser_tag_map[0], device)
         else:
             fixed_maps = [MapFromString(m, device) for m in args.laser_tag_map]
             map_generator = MapPool(fixed_maps)

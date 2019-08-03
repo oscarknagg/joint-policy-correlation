@@ -119,11 +119,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Write args file
-    argsfile = f'{PATH}/experiments/{args.save_folder}/args.txt'
-    os.makedirs(os.path.split(argsfile)[0], exist_ok=True)
-    if not os.path.exists(argsfile):
-        with open(f'{PATH}/experiments/{args.save_folder}/args.txt', 'w') as f:
-            print('python ' + ' '.join(sys.argv[1:]), file=f)
+    if args.save_model or args.save_logs or args.save_video or args.save_heatmap:
+        argsfile = f'{PATH}/experiments/{args.save_folder}/args.txt'
+        os.makedirs(os.path.split(argsfile)[0], exist_ok=True)
+        if not os.path.exists(argsfile):
+            with open(f'{PATH}/experiments/{args.save_folder}/args.txt', 'w') as f:
+                print('python ' + ' '.join(sys.argv[1:]), file=f)
 
     args.dtype = arguments.get_dtype(args.dtype)
 
