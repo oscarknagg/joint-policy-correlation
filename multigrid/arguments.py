@@ -61,6 +61,7 @@ def add_training_arguments(parser: argparse.ArgumentParser) -> argparse.Argument
     parser.add_argument('--ppo-epochs', default=3, type=int)
     parser.add_argument('--ppo-batch', default=32, type=int)
     parser.add_argument('--lr', default=1e-3, type=float)
+    parser.add_argument('--weight-decay', default=0, type=float)
     parser.add_argument('--gamma', default=0.99, type=float)
     parser.add_argument('--gae-lambda', default=None, type=float)
     parser.add_argument('--update-steps', default=5, type=int)
@@ -254,7 +255,7 @@ def get_trainers(args: argparse.Namespace, models: List[nn.Module]) -> Optional[
                         agent_id=f'agent_{i}',
                         model=m,
                         update_steps=args.update_steps,
-                        optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=0),
+                        optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=args.weight_decay),
                         a2c=rl.ActorCritic(gamma=args.gamma, normalise_returns=args.norm_returns, dtype=args.dtype,
                                            use_gae=args.gae_lambda is not None, gae_lambda=args.gae_lambda),
                         max_grad_norm=args.max_grad_norm,
@@ -272,7 +273,7 @@ def get_trainers(args: argparse.Namespace, models: List[nn.Module]) -> Optional[
                         agent_id=f'agent_{i}',
                         model=m,
                         update_steps=args.update_steps,
-                        optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=0),
+                        optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=args.weight_decay),
                         a2c=rl.ActorCritic(gamma=args.gamma, normalise_returns=args.norm_returns, dtype=args.dtype,
                                            use_gae=args.gae_lambda is not None, gae_lambda=args.gae_lambda),
                         max_grad_norm=args.max_grad_norm,
