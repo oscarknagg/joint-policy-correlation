@@ -20,5 +20,5 @@ def move_pixels(pixels: torch.Tensor, directions: torch.Tensor) -> torch.Tensor:
     )
     directions_onehot = F.one_hot(directions, 4).to(pixels.dtype)
     head_deltas = torch.einsum('bchw,bc->bhw', [head_deltas, directions_onehot]).unsqueeze(1)
-    pixels += head_deltas
+    pixels += head_deltas.to(pixels.dtype)
     return pixels

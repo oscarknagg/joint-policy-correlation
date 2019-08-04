@@ -43,17 +43,19 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPa
     parser.add_argument('--n-repeats', default=1, type=int, help='Number of repeats to run')
     parser.add_argument('--n-processes', default=1, type=int)
     parser.add_argument('--resume-mode', default='local', type=str)
+    parser.add_argument('--strict', default=False, type=get_bool,
+                        help='Whether to raise an exception if an env experiences an inconsistency.')
+
     return parser
 
 
 def add_training_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-    parser.add_argument('--diayn', default=0, type=float)
+    parser.add_argument('--train', default=True, type=get_bool)
     parser.add_argument('--value-loss-coeff', default=1.0, type=float)
     parser.add_argument('--entropy', default=0.01, type=float)
     parser.add_argument('--max-grad-norm', default=0.5, type=float)
     parser.add_argument('--coord-conv', default=True, type=get_bool)
     parser.add_argument('--mask-dones', default=True, type=get_bool, help='Removes deaths from training trajectories.')
-    parser.add_argument('--train', default=True, type=get_bool)
     parser.add_argument('--train-algo', default='a2c', type=str)
     parser.add_argument('--ppo-eta-clip', default=0.1, type=float)
     parser.add_argument('--ppo-epochs', default=3, type=int)
@@ -163,7 +165,7 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
 
         env = LaserTag(num_envs=args.n_envs, num_agents=args.n_agents, height=args.height, width=args.width,
                        observation_fn=observation_fn, colour_mode=args.colour_mode,
-                       map_generator=map_generator, device=device, render_args=render_args)
+                       map_generator=map_generator, device=device, render_args=render_args, strict=args.strict)
     elif args.env == 'cooperative':
         raise NotImplementedError
     elif args.env == 'asymmetric':
