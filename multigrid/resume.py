@@ -45,22 +45,50 @@ class Resume(ABC):
     """Abstract for classes that handle resuming experiments from a checkpoint."""
     @staticmethod
     @abstractmethod
-    def _resume_models(args: Namespace, repeat: int):
+    def _resume_models(args: Namespace, repeat: int) -> (bool, List[str], float):
+        """Gets models to resume experiment with.
+
+        Args:
+            args: Command line arguments
+            repeat: Repeat index of run within experiment
+
+        Returns:
+            models_found: A bool indicating whether or not any models were found
+            model_files: A list of filepaths to the models
+            num_completed_steps: The number of steps that each model has been trained with
+        """
         raise NotImplementedError
 
     @staticmethod
     @abstractmethod
-    def _resume_log(args: Namespace, repeat: int):
+    def _resume_log(args: Namespace, repeat: int) -> (bool, List[str], float, float):
+        """Gets logs to resume experiment with.
+
+        Args:
+            args: Command line arguments
+            repeat: Repeat index of run within experiment
+
+        Returns:
+            logs_found: A bool indicating whether or not
+            log_file: Filepath to the logs for this run
+            num_completed_steps: The number of steps that each model has been trained with
+            num_completed_episodes: The number of episodes that have been completed
+        """
         raise NotImplementedError
 
     def resume(self, args: Namespace, repeat: int) -> ResumeData:
         logs_found, log_file, num_completed_steps, num_completed_episodes = self._resume_log(args, repeat)
-        models_found, model_files = self._resume_models(args, repeat)
+        # Use `num_completed_steps` from the model file
+        models_found, model_files, num_completed_steps = self._resume_models(args, repeat)
 
         # This operator is XOR. I know, I hadn't used this in python myself
         if logs_found ^ models_found:
             raise RuntimeError('Repeat {}: logs_found={}, models_found={}.'.format(repeat, logs_found, models_found))
         elif logs_found and models_found:
+            # Trim the log file to the number of model steps
+            df = pd.read_csv(log_file, comment='#')
+            df[df['steps'] <= num_completed_steps].to_csv(log_file, index=False)
+
             msg = build_resume_message(num_completed_steps, args.total_steps, num_completed_episodes,
                                        args.total_episodes, log_file, model_files)
             print(msg)
@@ -75,7 +103,7 @@ class Resume(ABC):
         )
 
 
-def get_latest_complete_set_of_models(n_models: int, repeat: int, checkpoint_models: List[dict]):
+def get_latest_complete_set_of_models(n_models: int, repeat: int, checkpoint_models: List[dict]) -> (List[str], float):
     """This handles the edge case where a training exited after saving only 1 of N models.
 
     In this case we want to restart from the last checkpoint which has all N models.
@@ -85,10 +113,10 @@ def get_latest_complete_set_of_models(n_models: int, repeat: int, checkpoint_mod
     latest_models = [f['filepath'] for f in checkpoint_models if f['steps'] == max_steps]
 
     if len(latest_models) == n_models:
-        return latest_models
+        return latest_models, max_steps
     elif len(latest_models) < n_models:
         # Trim the incomplete models and try again
-        # Recursion flex
+        # #RecursionFlex
         checkpoint_models = [i for i in checkpoint_models if f['steps'] < max_steps]
         return get_latest_complete_set_of_models(n_models, repeat, checkpoint_models)
     else:
@@ -118,10 +146,11 @@ class LocalResume(Resume):
                 # No models found
                 return False, []
 
-            latest_models = get_latest_complete_set_of_models(args.n_species, repeat, checkpoint_models)
+            latest_models, num_completed_steps = get_latest_complete_set_of_models(args.n_species, repeat,
+                                                                                   checkpoint_models)
             latest_models = [os.path.join(root, f) for f in latest_models]
             args.agent_location = latest_models
-            return bool(latest_models), latest_models
+            return bool(latest_models), latest_models, num_completed_steps
         else:
             return False, []
 
@@ -200,10 +229,10 @@ class S3Resume(Resume):
                 # No models found
                 return False, []
 
-            latest_models = get_latest_complete_set_of_models(args.n_species, repeat, checkpoint_models)
+            latest_models, num_completed_steps = get_latest_complete_set_of_models(args.n_species, repeat, checkpoint_models)
             latest_models = [f's3://{args.s3_bucket}/{args.save_folder}/models/{f}' for f in latest_models]
             args.agent_location = latest_models
-            return bool(latest_models), latest_models
+            return bool(latest_models), latest_models, num_completed_steps
         else:
             return False, []
 
