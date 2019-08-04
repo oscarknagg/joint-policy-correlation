@@ -192,8 +192,6 @@ class S3Resume(Resume):
             num_completed_steps = old_log_file.iloc[-1].steps
             num_completed_episodes = old_log_file.iloc[-1].episodes
         except ClientError as e:
-            print('ClientError')
-            print(str(e))
             if e.response['Error']['Code'] == "404":
                 # Object not found
                 logs_found = False
@@ -202,8 +200,6 @@ class S3Resume(Resume):
             else:
                 raise e
         except (FileNotFoundError, PermissionError) as e:
-            print('OtherError')
-            print(str(e))
             # Another path for not finding the file
             # For some reason this raises a permission error as well
             logs_found = False
