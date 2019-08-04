@@ -37,6 +37,8 @@ def worker(repeat: int, device: str, args: argparse.Namespace):
         return
 
     args.agent_location = resume_data.model_paths
+    # Do a warm-start if we're resuming and there is no warm start specified
+    args.warm_start = 500 if (resume_data.resume and args.warm_start == 0) else args.warm_start
 
     # Configure env + agents
     observation_function = observations.FirstPersonCrop(
@@ -146,12 +148,18 @@ if __name__ == '__main__':
         # Assuming multi GPU training here
         devices = [f'cuda:{i}' for i in list(range(n_gpus)) * math.ceil(len(repeats) / n_gpus)][:len(repeats)]
 
-    pool = multiprocessing.Pool(args.n_processes, maxtasksperchild=1)
+    # Only use multiprocessing if specified as we get better error traces
+    # without multiprocessing.
     worker_args = [(r, d, a) for r, d, a in zip(repeats, devices, [args, ]*args.n_repeats)]
-    print([(r, d) for r, d, _ in worker_args])
-    try:
-        pool.starmap(worker, worker_args)
-    except KeyboardInterrupt:
-        raise Exception
-    finally:
-        pool.close()
+    if args.n_processes > 1:
+        pool = multiprocessing.Pool(args.n_processes, maxtasksperchild=1)
+        print([(r, d) for r, d, _ in worker_args])
+        try:
+            pool.starmap(worker, worker_args)
+        except KeyboardInterrupt:
+            raise Exception
+        finally:
+            pool.close()
+    else:
+        for run_args in worker_args:
+            worker(*run_args)

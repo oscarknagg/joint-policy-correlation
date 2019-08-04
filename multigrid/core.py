@@ -326,7 +326,10 @@ def build_render_rgb(
 
 class WarmStart:
     """Runs env for some steps before training starts."""
-    def __init__(self, env: MultiagentVecEnv, models: List[nn.Module], num_steps: int, interaction_handler: InteractionHandler):
+    def __init__(self, env: MultiagentVecEnv,
+                 models: List[nn.Module],
+                 num_steps: int,
+                 interaction_handler: InteractionHandler):
         super(WarmStart, self).__init__()
         self.env = env
         self.models = models
@@ -342,7 +345,7 @@ class WarmStart:
             (self.env.num_envs, 64), device=self.env.device) for i in range(self.env.num_agents)}
 
         for i in range(self.num_steps):
-            interaction = self.interaction_handler.interact(observations, hidden_states, cell_states)
+            interaction, hidden_states, cell_states = self.interaction_handler.interact(observations, hidden_states, cell_states)
 
             observations, reward, done, info = self.env.step(interaction.actions)
 
