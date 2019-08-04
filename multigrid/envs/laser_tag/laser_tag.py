@@ -415,6 +415,16 @@ class LaserTag(MultiagentVecEnv):
     def check_consistency(self):
         self.errors = torch.zeros_like(self.errors)
 
+        # Only one agent per env
+        agents_per_env = self.agents.view(self.num_envs, -1).sum(dim=1)
+        if torch.any(agents_per_env.gt(self.num_agents)):
+            bad_envs = agents_per_env.gt(self.num_agents)
+            msg = 'Too many agents in {} envs.'.format(bad_envs.sum().item())
+            if self.strict:
+                raise RuntimeError(msg)
+            else:
+                warnings.warn(msg)
+
         # Overlapping agents
         overlapping_agents = self.agents.view(self.num_envs, self.num_agents, self.height, self.width) \
             .sum(dim=1, keepdim=True) \

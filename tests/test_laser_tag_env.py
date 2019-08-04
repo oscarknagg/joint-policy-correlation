@@ -14,7 +14,7 @@ from tests._laser_trajectories import expected_laser_trajectories_0_2, expected_
 from config import DEFAULT_DEVICE, PATH
 
 
-render_envs = True
+render_envs = False
 size = 9
 render_sleep = 0.4
 # render_sleep = 1
