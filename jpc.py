@@ -2,18 +2,16 @@
 import os
 import argparse
 from itertools import product
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool
 import torch
 import warnings
 
 from multigrid.core import MultiAgentRun
 from multigrid.core import CallbackList
 from multigrid.callbacks import loggers
-from multigrid.callbacks.render import Render
 from multigrid.interaction import MultiSpeciesHandler
 from multigrid import agents
 from multigrid import observations
-from multigrid import utils
 from multigrid import arguments
 from config import PATH, INPUT_CHANNELS
 
@@ -24,8 +22,9 @@ def worker(i, j):
         print('({}, {}), already complete.'.format(i, j))
         return
 
-    env = arguments.get_env(experiment_args, observation_function, experiment_args.device)
+    env = arguments.get_env(experiment_args, observation_function, args.device)
 
+    # Generic get-models
     try:
         model_locations = [
             models_to_run[i, 0],
@@ -40,9 +39,9 @@ def worker(i, j):
         models.append(
             agents.GRUAgent(
                 num_actions=env.num_actions, num_initial_convs=2, in_channels=INPUT_CHANNELS, conv_channels=32,
-                num_residual_convs=2, num_feedforward=1, feedforward_dim=64).to(device=experiment_args.device, dtype=experiment_args.dtype)
+                num_residual_convs=2, num_feedforward=1, feedforward_dim=64).to(device=args.device, dtype=experiment_args.dtype)
         )
-        models[-1].load_state_dict(torch.load(model_path))
+        models[-1].load_state_dict(torch.load(model_path, map_location=args.device))
 
     interaction_handler = MultiSpeciesHandler(models, experiment_args.n_species, experiment_args.n_agents, experiment_args.agent_type, keep_obs=False)
     print(f'{PATH}/experiments/{args.experiment_folder}/jpc/{i}-{j}.csv')
