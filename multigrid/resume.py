@@ -127,7 +127,7 @@ def get_latest_complete_set_of_models(n_models: int, repeat: int, checkpoint_mod
 
 class LocalResume(Resume):
     @staticmethod
-    def _resume_models(args: Namespace, repeat: int):
+    def _resume_models(args: Namespace, repeat: int) -> (bool, List[str], float):
         if os.path.exists(f'{PATH}/experiments/{args.save_folder}/models/'):
             # Get latest checkpoint
             checkpoint_models = []
@@ -144,7 +144,7 @@ class LocalResume(Resume):
 
             if not checkpoint_models:
                 # No models found
-                return False, []
+                return False, [], 0
 
             latest_models, num_completed_steps = get_latest_complete_set_of_models(args.n_species, repeat,
                                                                                    checkpoint_models)
@@ -152,7 +152,7 @@ class LocalResume(Resume):
             args.agent_location = latest_models
             return bool(latest_models), latest_models, num_completed_steps
         else:
-            return False, []
+            return False, [], 0
 
     @staticmethod
     def _resume_log(args: Namespace, repeat: int):
@@ -180,6 +180,7 @@ class S3Resume(Resume):
         # load it and check for a 404.
         try:
             s3 = boto3.client('s3')
+            os.makedirs(f'{PATH}/experiments/{args.save_folder}/logs/', exist_ok=True)
             s3.download_file(
                 args.s3_bucket,
                 f'{args.save_folder}/logs/{save_file}.csv',
@@ -191,6 +192,8 @@ class S3Resume(Resume):
             num_completed_steps = old_log_file.iloc[-1].steps
             num_completed_episodes = old_log_file.iloc[-1].episodes
         except ClientError as e:
+            print('ClientError')
+            print(str(e))
             if e.response['Error']['Code'] == "404":
                 # Object not found
                 logs_found = False
@@ -199,6 +202,8 @@ class S3Resume(Resume):
             else:
                 raise e
         except (FileNotFoundError, PermissionError) as e:
+            print('OtherError')
+            print(str(e))
             # Another path for not finding the file
             # For some reason this raises a permission error as well
             logs_found = False
@@ -208,7 +213,7 @@ class S3Resume(Resume):
         return logs_found, f'{PATH}/experiments/{args.save_folder}/logs/{save_file}.csv', num_completed_steps, num_completed_episodes
 
     @staticmethod
-    def _resume_models(args: Namespace, repeat: int):
+    def _resume_models(args: Namespace, repeat: int) -> (bool, List[str], float):
         s3 = boto3.client('s3')
         checkpoint_models = []
         object_query = s3.list_objects(Bucket=args.s3_bucket, Prefix=f'{args.save_folder}/models/')
@@ -227,14 +232,14 @@ class S3Resume(Resume):
 
             if not checkpoint_models:
                 # No models found
-                return False, []
+                return False, [], 0
 
             latest_models, num_completed_steps = get_latest_complete_set_of_models(args.n_species, repeat, checkpoint_models)
             latest_models = [f's3://{args.s3_bucket}/{args.save_folder}/models/{f}' for f in latest_models]
             args.agent_location = latest_models
             return bool(latest_models), latest_models, num_completed_steps
         else:
-            return False, []
+            return False, [], 0
 
 
 """
