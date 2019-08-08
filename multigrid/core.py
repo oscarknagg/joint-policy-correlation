@@ -210,9 +210,9 @@ class MultiAgentRun(object):
                                                                  self.interaction_handler).warm_start()
         else:
             observations = self.env.reset()
-            hidden_states = {f'agent_{i}': torch.zeros((self.env.num_envs, 64), device=self.env.device) for i in
+            hidden_states = {f'agent_{i}': torch.zeros((self.env.num_envs, self.models[i].hidden_size), device=self.env.device) for i in
                              range(self.env.num_agents)}
-            cell_states = {f'agent_{i}': torch.zeros((self.env.num_envs, 64), device=self.env.device) for i in
+            cell_states = {f'agent_{i}': torch.zeros((self.env.num_envs, self.models[i].cell_size), device=self.env.device) for i in
                            range(self.env.num_agents)}
 
         # Interact with environment

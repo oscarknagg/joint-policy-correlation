@@ -5,8 +5,7 @@ import os
 import torch
 
 from multigrid.envs import LaserTag, Slither
-from multigrid.envs.laser_tag.map_generators import MapFromString, MapPool, generate_random_mazes, \
-    generate_random_respawns, FixedMapGenerator, Random
+from multigrid.envs.laser_tag.map_generators import MapFromString, MapPool, FixedMapGenerator, Random, MapFromFile
 from multigrid.observations import ObservationFunction
 from multigrid import rl
 from multigrid import utils
@@ -103,6 +102,8 @@ def add_snake_env_arguments(parser: argparse.ArgumentParser) -> argparse.Argumen
 
 def add_laser_tag_env_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument('--laser-tag-map', nargs='+', type=str, default='random')
+    parser.add_argument('--pathing-file', type=str)
+    parser.add_argument('--respawn-file', type=str)
     # Random map generation arguments
     parser.add_argument('--maze-complexity', type=float)
     parser.add_argument('--maze-density', type=float)
@@ -157,6 +158,8 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
                 # Generate n_maps random mazes to select from at random during each map reset
                 map_generator = Random(args.n_maps, args.n_respawns, args.height, args.width, args.maze_complexity,
                                        args.maze_density, args.device)
+            elif args.laser_tag_map[0] == 'from_file':
+                map_generator = MapFromFile(args.pathing_file, args.respawn_file, args.device)
             else:
                 # Single fixed map
                 map_generator = MapFromString(args.laser_tag_map[0], device)
@@ -219,6 +222,11 @@ def get_models(args: argparse.Namespace, num_actions: int, device: str) -> List[
                     num_actions=num_actions, num_initial_convs=2, in_channels=INPUT_CHANNELS, conv_channels=32,
                     num_residual_convs=2, num_feedforward=1, feedforward_dim=64).to(device=device,
                                                                                     dtype=args.dtype)
+            )
+        elif args.agent_type == 'lstm':
+            models.append(
+                agents.LSTMAgent(num_actions=num_actions, in_channels=INPUT_CHANNELS, channels=16, fc_size=32,
+                                 lstm_size=32).to(device=device, dtype=args.dtype)
             )
         elif args.agent_type == 'random':
             models.append(agents.RandomAgent(num_actions=num_actions, device=device))

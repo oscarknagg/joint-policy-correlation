@@ -15,7 +15,8 @@ class GRUAgent(nn.Module):
                  feedforward_dim: int,
                  num_actions: int,
                  conv_channels: int = 16,
-                 num_heads: int = 1):
+                 num_heads: int = 1,
+                 batch_norm: bool = False):
         super(GRUAgent, self).__init__()
         self.is_recurrent = True
         self.in_channels = in_channels
@@ -26,6 +27,7 @@ class GRUAgent(nn.Module):
         self.conv_channels = conv_channels
         self.num_actions = num_actions
         self.num_heads = num_heads
+        self.batch_norm = batch_norm
 
         initial_convs = [ConvBlock(self.in_channels, self.conv_channels, residual=False), ]
         for _ in range(self.num_initial_convs - 1):
