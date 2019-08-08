@@ -80,11 +80,11 @@ class PPOTrainer(SingleAgentTrainer):
               infos: Optional[Dict[str, torch.Tensor]] = None,
               current_obs: Optional[Dict[str, torch.Tensor]] = None,
               current_hiddens: Optional[Dict[str, torch.Tensor]] = None,
-              current_cells: Optional[Dict[str, torch.Tensor]] = None,):
+              current_cells: Optional[Dict[str, torch.Tensor]] = None):
         self.trajectories.append(
             obs=obs[self.agent_id],
-            hidden_state=hidden_states[self.agent_id].clone(),  # TODO: Only if GRU
-            cell_state=cell_states[self.agent_id].clone(),  # TODO: Only if LSTM
+            hidden_state=hidden_states[self.agent_id].clone() if self.model.recurrent in ('lstm', 'gru') else None,
+            cell_state=cell_states[self.agent_id].clone() if self.model.recurrent in ('lstm', ) else None,
             action=interaction.actions[self.agent_id],
             log_prob=interaction.log_probs[self.agent_id].unsqueeze(-1),
             value=interaction.state_values[self.agent_id],
@@ -94,11 +94,13 @@ class PPOTrainer(SingleAgentTrainer):
         )
         if self.i % self.update_steps == 0:
             with torch.no_grad():
-                # TODO: Determine agent type
-                # _, bootstrap_values, _ = self.model(current_obs[self.agent_id], current_hiddens[self.agent_id])
-                # if self.model.is_lstm
-                _, bootstrap_values, _, _ = self.model(current_obs[self.agent_id], current_hiddens[self.agent_id],
-                                                       current_cells[self.agent_id])
+                if self.model.recurrent == 'lstm':
+                    _, bootstrap_values, _, _ = self.model(current_obs[self.agent_id], current_hiddens[self.agent_id],
+                                                           current_cells[self.agent_id])
+                elif self.model.recurrent == 'gru':
+                    _, bootstrap_values, _ = self.model(current_obs[self.agent_id], current_hiddens[self.agent_id])
+                else:
+                    _, bootstrap_values = self.model(current_obs[self.agent_id])
 
             returns = self.a2c.returns(
                 bootstrap_values.detach(),
@@ -115,7 +117,6 @@ class PPOTrainer(SingleAgentTrainer):
             for epoch in range(self.epochs):
                 data_generator = self._generate_batches(
                     self.trajectories.obs,
-                    # TODO: Hidden/cells based on agent type
                     self.trajectories.hidden_state.detach(),
                     self.trajectories.cell_state.detach(),
                     self.trajectories.actions.detach(),
@@ -125,14 +126,17 @@ class PPOTrainer(SingleAgentTrainer):
                     advantages
                 )
                 for batch in data_generator:
-                    # obs_batch, hidden_states_batch, actions_batch, values_batch, returns_batch, old_logs_probs_batch, \
-                    #     advantages_batch = batch
-                    obs_batch, hidden_states_batch, cell_states_batch, actions_batch, values_batch, returns_batch,\
+                    obs_batch, hidden_states_batch, cell_states_batch, actions_batch, values_batch, returns_batch, \
                         old_logs_probs_batch, advantages_batch = batch
 
-                    # TODO: Hidden/cells based on agent type
-                    # action_probabilities, new_values, _ = self.model(obs_batch, hidden_states_batch)
-                    action_probabilities, new_values, _, _ = self.model(obs_batch, hidden_states_batch, cell_states_batch)
+                    if self.model.recurrent == 'lstm':
+                        action_probabilities, new_values, _, _ = self.model(obs_batch, hidden_states_batch,
+                                                                            cell_states_batch)
+                    elif self.model.recurrent == 'gru':
+                        action_probabilities, new_values, _ = self.model(obs_batch, hidden_states_batch)
+                    else:
+                        action_probabilities, new_values = self.model(obs_batch)
+
                     new_action_log_probs = Categorical(action_probabilities).log_prob(actions_batch)
                     new_entropies = Categorical(action_probabilities).entropy()
 

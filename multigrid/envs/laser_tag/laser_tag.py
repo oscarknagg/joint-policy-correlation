@@ -72,6 +72,7 @@ class LaserTag(MultiagentVecEnv):
         self.colour_mode = colour_mode
         self.observation_fn = observation_fn
         self.initial_hp = initial_hp
+        # self.max_env_lifetime = 100
         self.max_env_lifetime = env_lifetime
         self.num_actions = 10
 

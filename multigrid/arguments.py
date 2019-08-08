@@ -53,7 +53,6 @@ def add_training_arguments(parser: argparse.ArgumentParser) -> argparse.Argument
     parser.add_argument('--value-loss-coeff', default=1.0, type=float)
     parser.add_argument('--entropy', default=0.01, type=float)
     parser.add_argument('--max-grad-norm', default=0.5, type=float)
-    parser.add_argument('--coord-conv', default=True, type=get_bool)
     parser.add_argument('--mask-dones', default=True, type=get_bool, help='Removes deaths from training trajectories.')
     parser.add_argument('--train-algo', default='a2c', type=str)
     parser.add_argument('--ppo-eta-clip', default=0.1, type=float)
@@ -96,7 +95,7 @@ def add_snake_env_arguments(parser: argparse.ArgumentParser) -> argparse.Argumen
     parser.add_argument('--food-mode', type=str, default='random_rate')
     parser.add_argument('--food-rate', type=float, default=3e-4)
     parser.add_argument('--respawn-mode', type=str, default='any')
-    parser.add_argument('--colour-mode', type=str, default='random')
+    parser.add_argument('--colour-mode', type=str, default='fixed')
     return parser
 
 
@@ -216,17 +215,10 @@ def get_models(args: argparse.Namespace, num_actions: int, device: str) -> List[
                     num_residual_convs=2, num_feedforward=1, feedforward_dim=64).to(device=device,
                                                                                     dtype=args.dtype)
             )
-        elif args.agent_type == 'gru':
+        elif args.agent_type in ('lstm', 'gru'):
             models.append(
-                agents.GRUAgent(
-                    num_actions=num_actions, num_initial_convs=2, in_channels=INPUT_CHANNELS, conv_channels=32,
-                    num_residual_convs=2, num_feedforward=1, feedforward_dim=64).to(device=device,
-                                                                                    dtype=args.dtype)
-            )
-        elif args.agent_type == 'lstm':
-            models.append(
-                agents.LSTMAgent(num_actions=num_actions, in_channels=INPUT_CHANNELS, channels=16, fc_size=32,
-                                 lstm_size=32).to(device=device, dtype=args.dtype)
+                agents.RecurrentAgent(recurrent_module=args.agent_type, num_actions=num_actions, in_channels=INPUT_CHANNELS,
+                                      channels=16, fc_size=32, hidden_size=32).to(device=device, dtype=args.dtype)
             )
         elif args.agent_type == 'random':
             models.append(agents.RandomAgent(num_actions=num_actions, device=device))
