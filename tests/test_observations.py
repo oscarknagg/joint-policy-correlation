@@ -5,7 +5,7 @@ import torch
 
 from multigrid import observations
 from multigrid import envs
-from multigrid.envs.laser_tag.map_generators import MapFromString
+from multigrid.envs.maps.map_generators import MapFromString
 from multigrid.envs.laser_tag import maps
 from config import DEFAULT_DEVICE
 

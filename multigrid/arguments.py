@@ -5,7 +5,7 @@ import os
 import torch
 
 from multigrid.envs import LaserTag, Slither
-from multigrid.envs.laser_tag.map_generators import MapFromString, MapPool, FixedMapGenerator, Random, MapFromFile
+from multigrid.envs.maps import parse_mapstring, MapPool, Random, maps_from_file, FixedMapGenerator
 from multigrid.observations import ObservationFunction
 from multigrid import rl
 from multigrid import utils
@@ -155,15 +155,16 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
         if len(args.laser_tag_map) == 1:
             if args.laser_tag_map[0] == 'random':
                 # Generate n_maps random mazes to select from at random during each map reset
-                map_generator = Random(args.n_maps, args.n_respawns, args.height, args.width, args.maze_complexity,
+                map_generator = Random(args.n_respawns, args.height, args.width, args.maze_complexity,
                                        args.maze_density, args.device)
             elif args.laser_tag_map[0] == 'from_file':
-                map_generator = MapFromFile(args.pathing_file, args.respawn_file, args.device, args.n_maps)
+                maps = maps_from_file(args.pathing_file, args.respawn_file, args.device, args.n_maps)
+                map_generator = MapPool(maps)
             else:
                 # Single fixed map
-                map_generator = MapFromString(args.laser_tag_map[0], device)
+                map_generator = FixedMapGenerator(parse_mapstring(args.laser_tag_map[0]), device)
         else:
-            fixed_maps = [MapFromString(m, device) for m in args.laser_tag_map]
+            fixed_maps = [parse_mapstring(m) for m in args.laser_tag_map]
             map_generator = MapPool(fixed_maps)
 
         env = LaserTag(num_envs=args.n_envs, num_agents=args.n_agents, height=args.height, width=args.width,

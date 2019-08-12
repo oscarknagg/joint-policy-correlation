@@ -5,7 +5,7 @@ from time import time
 import warnings
 
 from multigrid._filters import ORIENTATION_FILTERS
-from multigrid.utils import rotate_image_batch, drop_duplicates, pad_to_square, unpad_from_square, get_coords
+from multigrid.utils import drop_duplicates, get_coords
 from multigrid.core import MultiagentVecEnv, check_multi_vec_env_actions
 from multigrid.dynamics import move_pixels
 from multigrid.envs.maps import MapGenerator
@@ -13,12 +13,8 @@ from multigrid.observations import ObservationFunction, RenderObservations
 from config import DEFAULT_DEVICE, EPS
 
 
-class LaserTag(MultiagentVecEnv):
-    """Laser tag environment.
-
-    This environment is meant to be a slightly extended version of the laser tag multiagent
-    environment from Deepmind's paper: https://arxiv.org/pdf/1711.00832.pdf
-    """
+class TreasureHunt(MultiagentVecEnv):
+    """Co-operative environment."""
     no_op = 0
     rotate_right = 1
     rotate_left = 2
@@ -26,7 +22,7 @@ class LaserTag(MultiagentVecEnv):
     move_back = 4
     move_right = 5
     move_left = 6
-    fire = 7
+    dig = 7
     move_forward_and_turn_right = 8
     move_forward_and_turn_left = 9
 
@@ -43,7 +39,7 @@ class LaserTag(MultiagentVecEnv):
                  map_generator: MapGenerator,
                  strict: bool = False,
                  verbose: int = 0,
-                 colour_mode: str = 'random',
+                 colour_mode: str = 'fixed',
                  observation_fn: ObservationFunction = RenderObservations(),
                  manual_setup: bool = False,
                  initial_hp: int = 2,
@@ -51,14 +47,13 @@ class LaserTag(MultiagentVecEnv):
                  env_lifetime: int = 1000,
                  dtype: torch.dtype = torch.float,
                  device: str = DEFAULT_DEVICE):
-        super(LaserTag, self).__init__(num_envs, num_agents, height, width, dtype, device)
+        super(TreasureHunt, self).__init__(num_envs, num_agents, height, width, dtype, device)
         self.strict = strict
         self.verbose = verbose
         self.map_generator = map_generator
         self.colour_mode = colour_mode
         self.observation_fn = observation_fn
         self.initial_hp = initial_hp
-        # self.max_env_lifetime = 100
         self.max_env_lifetime = env_lifetime
         self.num_actions = 10
 
@@ -81,12 +76,11 @@ class LaserTag(MultiagentVecEnv):
 
         # Environment tensors
         self.env_lifetimes = torch.zeros((num_envs), dtype=torch.long, device=self.device, requires_grad=False)
-        self.lasers = torch.zeros((num_envs * num_agents, 1, height, width), dtype=self.dtype, device=self.device,
-                                  requires_grad=False)
 
-        self.has_fired = torch.zeros(self.num_envs * self.num_agents, dtype=torch.uint8, device=self.device)
+        self.has_dug = torch.zeros(self.num_envs * self.num_agents, dtype=torch.uint8, device=self.device)
         if not manual_setup:
-            self.agents, self.orientations, self.dones, self.hp, self.pathing, self.respawns = self._create_envs(num_envs)
+            self.agents, self.orientations, self.dones, self.hp, self.pathing, self.respawns, \
+                self.treasure = self._create_envs(num_envs)
         else:
             self.agents = torch.zeros((num_envs*num_agents, 1, height, width), device=device, requires_grad=False)
             self.orientations = torch.zeros((num_envs * num_agents), dtype=torch.long, device=self.device, requires_grad=False)
@@ -94,6 +88,7 @@ class LaserTag(MultiagentVecEnv):
             self.hp = torch.ones((num_envs * num_agents), dtype=torch.long, device=device, requires_grad=False) * self.initial_hp
             self.pathing = torch.zeros((num_envs, 1, height, width), device=device, requires_grad=False, dtype=torch.uint8)
             self.respawns = torch.zeros((num_envs, 1, height, width), device=device, requires_grad=False, dtype=torch.uint8)
+            self.treasure = torch.zeros((num_envs, 1, height, width), device=device, requires_grad=False, dtype=torch.uint8)
 
         # Environment outputs
         self.rewards = torch.zeros(self.num_envs * self.num_agents, dtype=torch.float, device=self.device)
@@ -125,13 +120,8 @@ class LaserTag(MultiagentVecEnv):
         actions = torch.stack([v for k, v in actions.items()]).t().flatten()
 
         # Reset stuff
-        self.lasers = torch.zeros((self.num_envs * self.num_agents, 1, self.height, self.width), dtype=self.dtype,
-                                  device=self.device,
-                                  requires_grad=False)
         self.rewards = torch.zeros(self.num_envs * self.num_agents, dtype=torch.float, device=self.device)
         self.dones = torch.zeros(self.num_envs * self.num_agents, dtype=torch.uint8, device=self.device)
-        # Whether each agent has hit an opponent this step, useful for creating a hit_rate info output
-        info_hits = torch.zeros(self.num_envs * self.num_agents, dtype=torch.uint8, device=self.device)
 
         # Movement
         has_moved = actions == self.move_forward
@@ -172,7 +162,9 @@ class LaserTag(MultiagentVecEnv):
 
                 # Resolve pathing
                 t0 = time()
-                overlap = self.agents.gt(0.5) & (self._other_agents() | self.pathing.repeat_interleave(self.num_agents, 0))
+                overlap = self.agents.gt(0.5) & (self._other_agents() |
+                                                 self.pathing.repeat_interleave(self.num_agents, 0) |
+                                                 self.treasure.repeat_interleave(self.num_agents, 0))
                 reset_due_to_pathing = overlap.view(self.num_envs * self.num_agents, -1).any(dim=1)
                 if torch.any(reset_due_to_pathing):
                     self.agents[reset_due_to_pathing & currently_moving] = original_agents[reset_due_to_pathing & currently_moving]
@@ -185,105 +177,9 @@ class LaserTag(MultiagentVecEnv):
         self.orientations.fmod_(4)
         self._log(f'Orientations: {1000 * (time() - t0)}ms')
 
-        self.has_fired = actions == self.fire
-        if torch.any(self.has_fired):
-            other = ~F.one_hot(torch.arange(self.num_agents, device=self.device).repeat(self.num_envs), self.num_agents).byte()
-            other_agents = self._other_agents()
-
-            t0 = time()
-            # Handle lasers
-            lasers = torch.ones((self.num_envs*self.num_agents, 1, self.height, self.width), dtype=torch.uint8,
-                                device=self.device)
-
-            orientation_preprocessing = [
-                (0, 0, 0),
-                (1, 270, 90),
-                (2, 180, 180),
-                (3, 90, 270),
-            ]
-
-            # The _do_lasers() method calculates laser positions in a vectorised way but only for a particular
-            # orientation. Hence I rotate each agent to the required orientation, apply the algorithm and then
-            # rotate back to original position
-            agents = self.agents.clone()
-            pathing = self.pathing.repeat_interleave(self.num_agents, 0) + other_agents.gt(0.5)
-            # Pad to square if the h != w because we can only use rotate_image_batch on
-            # square images
-            agents = pad_to_square(agents)
-            pathing = pad_to_square(pathing, padding_value=1)
-            # lasers = pad_to_square(lasers, padding_value=1)
-            # lasers[~self.has_fired] = 0
-
-            for orientation, rotation, _ in orientation_preprocessing:
-                _orientation = self.orientations == orientation
-                if torch.any(_orientation):
-                    pathing[_orientation] = rotate_image_batch(pathing[_orientation], degree=rotation)
-                    agents[_orientation] = rotate_image_batch(agents[_orientation], degree=rotation)
-
-            self._log(f'Rotation pre-processing: {1000 * (time() - t0)}ms')
-
-            resolution_order = torch.randperm(self.num_agents, device=self.device).repeat(self.num_envs)
-            for i_resolve in range(self.num_agents):
-                resolve_these = resolution_order == i_resolve
-                currently_firing = self.has_fired & resolve_these
-                currently_being_hit = ~resolve_these
-
-                if not torch.any(currently_firing):
-                    continue
-
-                # pathing = pad_to_square(pathing, padding_value=1)
-                lasers = pad_to_square(lasers, padding_value=1)
-                lasers[~self.has_fired] = 0
-                lasers[currently_firing] = self._laser_trajectories(
-                    agents=agents[currently_firing],
-                    pathing=pathing[currently_firing]
-                )
-
-                for orientation, _, reverse_rotation in orientation_preprocessing:
-                    _orientation = self.orientations == orientation
-                    if torch.any(_orientation):
-                        lasers[_orientation] = rotate_image_batch(lasers[_orientation], degree=reverse_rotation)
-
-                lasers = unpad_from_square(lasers, original_h=self.height, original_w=self.width)
-
-                # For rendering
-                agent_blocking = self.agents \
-                    .view(self.num_envs, self.num_agents, self.height, self.width) \
-                    .sum(dim=1, keepdim=True) \
-                    .repeat_interleave(self.num_agents, 0).gt(0.5)
-                self.lasers[currently_firing] += (lasers & ~agent_blocking).float()[currently_firing]
-
-                # Check for hits (https://www.youtube.com/watch?v=RaMIIpc46gM) and update HP
-                lasers_ = lasers \
-                    .view(self.num_envs, self.num_agents, self.height, self.width) \
-                    .repeat_interleave(self.num_agents, 0) \
-                    .float()
-                other_lasers = torch.einsum('nahw,na->nhw', [lasers_, other.float()]).unsqueeze(1)
-                hit = (self.agents * other_lasers).gt(0.5).view(self.num_envs*self.num_agents, -1).any(dim=-1)
-                self.hp[currently_being_hit] -= hit[currently_being_hit].long()
-                self.hp.relu_()
-
-                # Kill
-                done_before_firing = self.dones.clone()
-                self.dones |= self.hp.float().lt(0.5)
-                dones_in_this_firing_step = self.dones & ~done_before_firing
-                self.agents[self.dones] = 0
-                # Agents that are killed before resolving there shots don't shoot
-                self.has_fired[self.dones] = 0
-
-                # Give rewards when an agent kills another agent i.e. when an agents laser overlaps another
-                # agent and it has done = True
-                other_agents_hit = other_agents.gt(0.5) & lasers.gt(0.5)
-                info_hits[currently_firing] |= other_agents_hit.view(self.num_envs*self.num_agents, -1).any(dim=-1)[currently_firing]
-                reward = other_agents_hit.view(self.num_envs*self.num_agents, -1).sum(dim=-1).float()
-                # We should only give a reward
-                # for killing  another agent however only one agent can be killed in each firing step (i.e. this
-                # for-loop). Hence instead of calculating which agent hits which particular other agents I just
-                # calculate whether any agent was killed in each env and then perform an AND (multiplication for floats)
-                # for with the hits
-                agent_killed_in_env = dones_in_this_firing_step.view(self.num_envs, self.num_agents).any(dim=1).repeat_interleave(self.num_agents, 0)
-                reward *= agent_killed_in_env.float()
-                self.rewards[currently_firing] += reward[currently_firing]
+        self.has_dug = actions == self.dig
+        if torch.any(self.has_dug):
+            pass
 
         self.env_lifetimes += 1
         observations = self._observe()
@@ -299,10 +195,6 @@ class LaserTag(MultiagentVecEnv):
             f'hp_{i}': d for i, d in
             enumerate(self.hp.clone().view(self.num_envs, self.num_agents).t().unbind())
         })
-        info.update({
-            f'hits_{i}': d for i, d in
-            enumerate(info_hits.clone().view(self.num_envs, self.num_agents).t().unbind())
-        })
         for i_action in range(self.num_actions):
             action_i = actions == i_action
             info.update({
@@ -311,42 +203,6 @@ class LaserTag(MultiagentVecEnv):
             })
 
         return observations, rewards, dones, info
-
-    def _laser_trajectories(self, agents: torch.Tensor, pathing: torch.Tensor) -> torch.Tensor:
-        """Calculates laser trajectories.
-
-        Args:
-            agents: Tensor of shape (num_agents, ...
-            pathing: Tensor of shape (num_agents, ...
-        """
-        t0 = time()
-        n = agents.size(0)
-        coords = get_coords(agents).to(self.device)
-        lasers = torch.ones((n, 1, self.height, self.width), dtype=torch.uint8,
-                            device=self.device)
-
-        lasers = pad_to_square(lasers, padding_value=1)
-
-        xy = agents * coords
-        x, y = xy.view(n, 2, -1).sum(dim=2).reshape(n, -1).unbind(dim=1)
-
-        # Handle orientation 0
-        lasers &= coords[:, 0:1] >= x[:, None, None, None].float()
-        lasers &= coords[:, 1:2] == y[:, None, None, None].float()
-        in_front_mask = (coords[:, 0:1] >= x[:, None, None, None].float())
-        in_front_mask &= (coords[:, 1:] >= y[:, None, None, None].float())
-        trimmed_pathing = pathing & in_front_mask
-
-        # Can I do this without the doing a cumsum twice in each direction?
-        # The difficulty is that I need the trajectory to be not continue through single block objects
-        # yet also penetrate 1 block in to them for hit calculations downstream
-        block = trimmed_pathing.cumsum(dim=2).cumsum(dim=3).cumsum(dim=2).cumsum(dim=3).gt(1.5)
-
-        lasers &= ~block
-
-        self._log(f'Lasers: {1000 * (time() - t0)}ms')
-
-        return lasers
 
     def reset(self, done: torch.Tensor = None, return_observations: bool = True) -> Optional[Dict[str, torch.Tensor]]:
         # Reset envs that contain no snakes
@@ -429,7 +285,6 @@ class LaserTag(MultiagentVecEnv):
 
         # Pathing overlap
         agent_pathing_overlap = self.pathing.repeat_interleave(self.num_agents, 0) & self.agents.gt(0.5)
-        # self.errors |= agent_pathing_overlap.view(self.num_envs, self.num_agents).any(dim=1)
         if torch.any(agent_pathing_overlap):
             bad_envs = agent_pathing_overlap.view(self.num_envs * self.num_agents, -1).any(dim=1)
             msg = 'Agent-wall overlap in {} envs.'.format(bad_envs.sum().item())
@@ -438,29 +293,18 @@ class LaserTag(MultiagentVecEnv):
             else:
                 warnings.warn(msg)
 
-        # Can only get reward when firing
-        not_fired_and_reward = (~self.has_fired) & self.rewards.gt(EPS)
-        # self.errors |= not_fired_and_reward
-        if torch.any(not_fired_and_reward):
-            print(not_fired_and_reward)
-            print(not_fired_and_reward.argmax())
-            print()
-            # bad_envs = not_fired_and_reward.view(self.num_envs * self.num_agents, -1).any(dim=1)
-            # print(torch.nonzero(bad_envs))
-            # i = torch.nonzero(bad_envs)[0]
-            i = not_fired_and_reward.argmax().item() // 2
-            print(self.agents.view(self.num_envs, self.num_agents, self.height, self.width)[i])
-            print('-'*20)
-            print(self.lasers.view(self.num_envs, self.num_agents, self.height, self.width)[i])
-            print('-'*20)
-            print('reward ', self.rewards.view(self.num_envs, self.num_agents)[i])
-            print('has_fired', self.has_fired.view(self.num_envs, self.num_agents)[i])
-
-            msg = 'Agent has got reward without firing in {} envs.'.format(not_fired_and_reward.sum().item())
+        # Treasure overlap
+        print(self.treasure.device, self.agents.device)
+        agent_treasure_overlap = self.treasure.repeat_interleave(self.num_agents, 0) & self.agents.gt(0.5)
+        if torch.any(agent_treasure_overlap):
+            bad_envs = agent_treasure_overlap.view(self.num_envs * self.num_agents, -1).any(dim=1)
+            msg = 'Agent-treasure overlap in {} envs.'.format(bad_envs.sum().item())
             if self.strict:
                 raise RuntimeError(msg)
             else:
                 warnings.warn(msg)
+
+        # Can only get reward when digging
 
         # Max reward per step is 1
         impossible_rewards = self.rewards.gt(1 + EPS)
@@ -537,6 +381,7 @@ class LaserTag(MultiagentVecEnv):
         map = self.map_generator.generate(num_envs)
         respawns = map.respawn
         pathing = map.pathing
+        treasure = map.treasure
 
         agents = torch.zeros((num_envs * self.num_agents, 1, self.height, self.width), dtype=self.dtype,
                              device=self.device, requires_grad=False)
@@ -568,7 +413,7 @@ class LaserTag(MultiagentVecEnv):
             hp[first_done_per_env] = self.initial_hp
             dones[first_done_per_env] = sucessfully_respawned
 
-        return agents, orientations, dones, hp, pathing, respawns
+        return agents, orientations, dones, hp, pathing, respawns, treasure
 
     def _get_env_images(self) -> torch.Tensor:
         t0 = time()
@@ -590,8 +435,8 @@ class LaserTag(MultiagentVecEnv):
             .short()
         img += orientation_highlights.expand_as(img)
 
-        # Add lasers
-        per_env_lasers = self.lasers.reshape(self.num_envs, self.num_agents, self.height, self.width).sum(dim=1).gt(0.5)
+        # Add treasure
+        per_env_lasers = self.treasure.reshape(self.num_envs, 1, self.height, self.width).sum(dim=1).gt(0.5)
         # Convert to NHWC axes for easier indexing here
         img = img.permute((0, 2, 3, 1))
         laser_colour = torch.tensor([127, 127, 31], device=self.device, dtype=torch.short)
