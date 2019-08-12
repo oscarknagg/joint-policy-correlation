@@ -107,7 +107,7 @@ def add_laser_tag_env_arguments(parser: argparse.ArgumentParser) -> argparse.Arg
     parser.add_argument('--maze-complexity', type=float)
     parser.add_argument('--maze-density', type=float)
     parser.add_argument('--n-respawns', type=int)
-    parser.add_argument('--n-maps', type=int)
+    parser.add_argument('--n-maps', type=int, default=None)
     return parser
 
 
@@ -158,7 +158,7 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
                 map_generator = Random(args.n_maps, args.n_respawns, args.height, args.width, args.maze_complexity,
                                        args.maze_density, args.device)
             elif args.laser_tag_map[0] == 'from_file':
-                map_generator = MapFromFile(args.pathing_file, args.respawn_file, args.device)
+                map_generator = MapFromFile(args.pathing_file, args.respawn_file, args.device, args.n_maps)
             else:
                 # Single fixed map
                 map_generator = MapFromString(args.laser_tag_map[0], device)

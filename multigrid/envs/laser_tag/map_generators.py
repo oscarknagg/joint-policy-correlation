@@ -239,13 +239,20 @@ class Random(LaserTagMapGenerator):
 
 
 class MapFromFile(LaserTagMapGenerator):
-    def __init__(self, pathing: str, respawn: str, device: str):
-        self.pathing = torch.from_numpy(np.load(pathing)).to(dtype=torch.uint8, device=device)
-        self.respawn = torch.from_numpy(np.load(respawn)).to(dtype=torch.uint8, device=device)
+    def __init__(self, pathing: str, respawn: str, device: str, num_maps: Optional[int] = None):
+        self.pathing = torch.from_numpy(np.load(pathing)).to(dtype=torch.uint8, device=device)[:num_maps]
+        self.respawn = torch.from_numpy(np.load(respawn)).to(dtype=torch.uint8, device=device)[:num_maps]
+
+        if num_maps is not None:
+            if self.pathing.size(0) < num_maps or self.respawn.size(0) < num_maps:
+                raise ValueError('Not enough maps in file to meet `num_maps` argument.')
+
+            self.pathing, self.respawn = self.pathing[:num_maps], self.respawn[:num_maps]
+
         self.num_maps = self.pathing.size(0)
 
         if self.pathing.size() != self.respawn.size():
-            raise ValueError('Incoompatible pathing and respawn shapes.')
+            raise ValueError('Incompatible pathing and respawn shapes.')
 
     def generate(self, num_envs: int) -> LaserTagMap:
         indices = torch.randint(low=0, high=self.num_maps, size=(num_envs, ))
