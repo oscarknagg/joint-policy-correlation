@@ -45,7 +45,10 @@ class A2CTrainer(SingleAgentTrainer):
               obs: Optional[Dict[str, torch.Tensor]] = None,
               rewards: Optional[Dict[str, torch.Tensor]] = None,
               dones: Optional[Dict[str, torch.Tensor]] = None,
-              infos: Optional[Dict[str, torch.Tensor]] = None):
+              infos: Optional[Dict[str, torch.Tensor]] = None,
+              current_obs: Optional[Dict[str, torch.Tensor]] = None,
+              current_hiddens: Optional[Dict[str, torch.Tensor]] = None,
+              current_cells: Optional[Dict[str, torch.Tensor]] = None):
         self.trajectories.append(
             action=interaction.actions[self.agent_id].unsqueeze(-1),
             log_prob=interaction.log_probs[self.agent_id].unsqueeze(-1),

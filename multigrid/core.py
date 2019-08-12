@@ -210,9 +210,9 @@ class MultiAgentRun(object):
                                                                  self.interaction_handler).warm_start()
         else:
             observations = self.env.reset()
-            hidden_states = {f'agent_{i}': torch.zeros((self.env.num_envs, 64), device=self.env.device) for i in
+            hidden_states = {f'agent_{i}': torch.zeros((self.env.num_envs, self.models[i].hidden_size), device=self.env.device) for i in
                              range(self.env.num_agents)}
-            cell_states = {f'agent_{i}': torch.zeros((self.env.num_envs, 64), device=self.env.device) for i in
+            cell_states = {f'agent_{i}': torch.zeros((self.env.num_envs, self.models[i].cell_size), device=self.env.device) for i in
                            range(self.env.num_agents)}
 
         # Interact with environment
@@ -244,8 +244,8 @@ class MultiAgentRun(object):
                 # Reset hidden states on death or on environment reset
                 for _agent, _done in done.items():
                     if _agent != '__all__':
-                        hidden_states[_agent][done['__all__'] | _done].mul_(0)
-                        cell_states[_agent][done['__all__'] | _done].mul_(0)
+                        hidden_states[_agent][done['__all__'] | _done] = 0
+                        cell_states[_agent][done['__all__'] | _done] = 0
 
             if not self.train:
                 hidden_states = {k: v.detach() for k, v in hidden_states.items()}

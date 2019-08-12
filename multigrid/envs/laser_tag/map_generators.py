@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, NamedTuple, Union, Optional
 import torch
 import torch.nn.functional as F
+import numpy as np
 
 from .maps import MAPS
 from multigrid.utils import drop_duplicates
@@ -229,6 +230,22 @@ class Random(LaserTagMapGenerator):
         self.num_maps = num_maps
         self.pathing = generate_random_mazes(num_maps, height, width, maze_complexity, maze_density, device)
         self.respawn = generate_random_respawns(self.pathing, num_respawns, min_respawn_separation)
+
+    def generate(self, num_envs: int) -> LaserTagMap:
+        indices = torch.randint(low=0, high=self.num_maps, size=(num_envs, ))
+        pathing = self.pathing[indices]
+        respawn = self.respawn[indices]
+        return LaserTagMap(pathing, respawn)
+
+
+class MapFromFile(LaserTagMapGenerator):
+    def __init__(self, pathing: str, respawn: str, device: str):
+        self.pathing = torch.from_numpy(np.load(pathing)).to(dtype=torch.uint8, device=device)
+        self.respawn = torch.from_numpy(np.load(respawn)).to(dtype=torch.uint8, device=device)
+        self.num_maps = self.pathing.size(0)
+
+        if self.pathing.size() != self.respawn.size():
+            raise ValueError('Incoompatible pathing and respawn shapes.')
 
     def generate(self, num_envs: int) -> LaserTagMap:
         indices = torch.randint(low=0, high=self.num_maps, size=(num_envs, ))

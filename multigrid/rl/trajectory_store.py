@@ -17,7 +17,8 @@ class TrajectoryStore(object):
                value: torch.Tensor = None,
                done: torch.Tensor = None,
                entropy: torch.Tensor = None,
-               hidden_state: torch.Tensor = None):
+               hidden_state: torch.Tensor = None,
+               cell_state: torch.Tensor = None):
         """Adds a transition to the store.
 
         Each argument should be a vector of shape (num_envs, 1)
@@ -46,6 +47,9 @@ class TrajectoryStore(object):
         if hidden_state is not None:
             self._hiddens.append(hidden_state)
 
+        if cell_state is not None:
+            self._cells.append(hidden_state)
+
     def clear(self):
         self._states = []
         self._actions = []
@@ -55,6 +59,7 @@ class TrajectoryStore(object):
         self._dones = []
         self._entropies = []
         self._hiddens = []
+        self._cells = []
 
     @property
     def obs(self):
@@ -86,4 +91,8 @@ class TrajectoryStore(object):
 
     @property
     def hidden_state(self):
+        return torch.stack(self._hiddens)
+
+    @property
+    def cell_state(self):
         return torch.stack(self._hiddens)

@@ -68,9 +68,11 @@ class MultiSpeciesHandler(InteractionHandler):
         log_probs = {}
         for i, (agent, obs) in enumerate(observations.items()):
             model = self.models[i * self.n_species // self.n_agents]
-            if self.agent_type == 'lstm':
+            # if self.agent_type == 'lstm':
+            if model.recurrent == 'lstm':
                 probs_, value_, hx[agent], cx[agent] = model(obs, hx[agent], cx[agent])
-            elif self.agent_type == 'gru':
+            # elif self.agent_type == 'gru':
+            elif model.recurrent == 'gru':
                 probs_, value_, hx[agent] = model(obs, hx[agent])
             else:
                 probs_, value_ = model(obs)
