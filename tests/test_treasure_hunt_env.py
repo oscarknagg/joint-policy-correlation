@@ -10,19 +10,19 @@ from multigrid import observations
 from config import DEFAULT_DEVICE
 
 
-DEFAULT_DEVICE = 'cpu'
-render_envs = True
+render_envs = False
 size = 9
 render_sleep = 0.4
 # render_sleep = 1
 torch.random.manual_seed(3)
 
 
-def get_test_env(num_envs=2):
+def get_test_env(num_envs=2, treasure_refresh_rate=10):
     # Same as maps.maps.small2 map from the Deepmind paper
     env = TreasureHunt(num_envs, 2, height=size, width=size,
-                       map_generator=FixedMapGenerator(parse_mapstring('treasure_hunt-small2'), DEFAULT_DEVICE),
-                       manual_setup=True, colour_mode='fixed', strict=True, device=DEFAULT_DEVICE)
+                       map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE),
+                       manual_setup=True, colour_mode='fixed', strict=True, device=DEFAULT_DEVICE,
+                       treasure_refresh_rate=treasure_refresh_rate)
 
     for i in range(num_envs):
         env.agents[2*i, :, 1, 1] = 1
@@ -49,10 +49,10 @@ def get_test_env(num_envs=2):
     env.respawns[:, :, 7, 7] = 1
 
     env.treasure = torch.zeros((num_envs, 1, size, size), dtype=torch.uint8, device=DEFAULT_DEVICE, requires_grad=False)
-    env.treasure[:, :, 1, 3] = 1
-    env.treasure[:, :, 3, 6] = 1
-    env.treasure[:, :, 5, 2] = 1
-    env.treasure[:, :, 7, 5] = 1
+    env.treasure[:, :, 1, 3] = env.treasure_refresh_rate + 1
+    env.treasure[:, :, 3, 6] = env.treasure_refresh_rate + 1
+    env.treasure[:, :, 5, 2] = env.treasure_refresh_rate + 1
+    env.treasure[:, :, 7, 5] = env.treasure_refresh_rate + 1
 
     return env
 
@@ -72,9 +72,12 @@ def _test_action_sequence(test_fixture, env, all_actions, expected_orientations=
             agent: agent_actions[i] for agent, agent_actions in all_actions.items()
         }
 
+        print(env.treasure[0, 0])
         obs, rewards, dones, info = env.step(actions)
         render(env)
         env.check_consistency()
+        print(i, env.rewards, expected_reward[i])
+        print('-'*20)
 
         if expected_x is not None:
             test_fixture.assertTrue(torch.equal(env.x.cpu(), expected_x[i]))
@@ -92,19 +95,37 @@ def _test_action_sequence(test_fixture, env, all_actions, expected_orientations=
         env.reset()
 
 
-class TestLaserTag(unittest.TestCase):
+class TestTreasureHunt(unittest.TestCase):
     def test_dig(self):
         env = get_test_env(num_envs=1)
         all_actions = {
-            'agent_0': torch.tensor([0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 7, 0]).unsqueeze(1).long().to(DEFAULT_DEVICE),
-            'agent_1': torch.tensor([0, 2, 3, 3, 3, 3, 3, 3, 1, 7, 7, 0]).unsqueeze(1).long().to(DEFAULT_DEVICE),
+            'agent_0': torch.tensor([2, 3, 3, 0, 0, 7, 0]).unsqueeze(1).long().to(DEFAULT_DEVICE),
+            'agent_1': torch.tensor([3, 3, 3, 3, 7, 7, 0]).unsqueeze(1).long().to(DEFAULT_DEVICE),
         }
-        _test_action_sequence(self, env, all_actions)
+        expected_reward = torch.tensor([
+            [0, 0, 0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 0, 1, 0],
+        ]).t().float()
+
+        _test_action_sequence(self, env, all_actions, expected_reward=expected_reward)
+
+    def test_treasure_respawn(self):
+        env = get_test_env(num_envs=1, treasure_refresh_rate=2)
+        all_actions = {
+            'agent_0': torch.tensor([2, 3, 3, 0, 7, 0, 7, 7, 0]).unsqueeze(1).long().to(DEFAULT_DEVICE),
+            'agent_1': torch.tensor([3, 3, 3, 0, 7, 0, 7, 7, 0]).unsqueeze(1).long().to(DEFAULT_DEVICE),
+        }
+        expected_reward = torch.tensor([
+            [0, 0, 0, 0, 1, 0, 0, 1, 0],
+            [0, 0, 0, 0, 1, 0, 0, 1, 0],
+        ]).t().float()
+
+        _test_action_sequence(self, env, all_actions, expected_reward=expected_reward)
 
     def test_observations(self):
         obs_fn = observations.RenderObservations()
         env = TreasureHunt(num_envs=1, num_agents=2, height=9, width=9,
-                           map_generator=FixedMapGenerator(parse_mapstring('treasure_hunt-small2'), DEFAULT_DEVICE),
+                           map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE),
                            observation_fn=obs_fn, device=DEFAULT_DEVICE, strict=True)
 
         agent_obs = obs_fn.observe(env)

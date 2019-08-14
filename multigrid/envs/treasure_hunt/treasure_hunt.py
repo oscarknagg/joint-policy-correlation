@@ -45,6 +45,7 @@ class TreasureHunt(MultiagentVecEnv):
                  initial_hp: int = 2,
                  render_args: dict = None,
                  env_lifetime: int = 1000,
+                 treasure_refresh_rate: int = 10,
                  dtype: torch.dtype = torch.float,
                  device: str = DEFAULT_DEVICE):
         super(TreasureHunt, self).__init__(num_envs, num_agents, height, width, dtype, device)
@@ -55,7 +56,10 @@ class TreasureHunt(MultiagentVecEnv):
         self.observation_fn = observation_fn
         self.initial_hp = initial_hp
         self.max_env_lifetime = env_lifetime
+        self.treasure_refresh_rate = treasure_refresh_rate + 1
         self.num_actions = 10
+        self.dig_radius = 1
+        self.diggers_needed = 2
 
         if colour_mode == 'random':
             self.agent_colours = self._get_n_colours(num_envs*num_agents)
@@ -164,7 +168,7 @@ class TreasureHunt(MultiagentVecEnv):
                 t0 = time()
                 overlap = self.agents.gt(0.5) & (self._other_agents() |
                                                  self.pathing.repeat_interleave(self.num_agents, 0) |
-                                                 self.treasure.repeat_interleave(self.num_agents, 0))
+                                                 self.treasure.gt(self.treasure_refresh_rate+0.5).repeat_interleave(self.num_agents, 0))
                 reset_due_to_pathing = overlap.view(self.num_envs * self.num_agents, -1).any(dim=1)
                 if torch.any(reset_due_to_pathing):
                     self.agents[reset_due_to_pathing & currently_moving] = original_agents[reset_due_to_pathing & currently_moving]
@@ -179,7 +183,19 @@ class TreasureHunt(MultiagentVecEnv):
 
         self.has_dug = actions == self.dig
         if torch.any(self.has_dug):
-            pass
+            dig_counts = F.conv2d(
+                self.agents * self.has_dug[:, None, None, None].float(),
+                torch.ones((1, 1, 2 * self.dig_radius + 1, 2 * self.dig_radius + 1), device=self.device),
+                padding=1
+            ).view(self.num_envs, self.num_agents, self.height, self.width).sum(dim=1, keepdim=True)
+            dig_zones = dig_counts.gt(self.diggers_needed-0.5)
+            found_treasure = dig_zones & self.treasure.gt(self.treasure_refresh_rate+0.5)
+            self.rewards += found_treasure.view(self.num_envs, -1).sum(dim=1).float()
+            self.treasure[found_treasure] = 1
+
+        # Refresh treasure
+        self.treasure[self.treasure.gt(0.5)] += 1
+        self.treasure.clamp_(0, self.treasure_refresh_rate + 1)
 
         self.env_lifetimes += 1
         observations = self._observe()
@@ -294,8 +310,7 @@ class TreasureHunt(MultiagentVecEnv):
                 warnings.warn(msg)
 
         # Treasure overlap
-        print(self.treasure.device, self.agents.device)
-        agent_treasure_overlap = self.treasure.repeat_interleave(self.num_agents, 0) & self.agents.gt(0.5)
+        agent_treasure_overlap = self.treasure.repeat_interleave(self.num_agents, 0).gt(self.treasure_refresh_rate+0.5) & self.agents.gt(0.5)
         if torch.any(agent_treasure_overlap):
             bad_envs = agent_treasure_overlap.view(self.num_envs * self.num_agents, -1).any(dim=1)
             msg = 'Agent-treasure overlap in {} envs.'.format(bad_envs.sum().item())
@@ -381,7 +396,7 @@ class TreasureHunt(MultiagentVecEnv):
         map = self.map_generator.generate(num_envs)
         respawns = map.respawn
         pathing = map.pathing
-        treasure = map.treasure
+        treasure = map.treasure * (self.treasure_refresh_rate + 1)
 
         agents = torch.zeros((num_envs * self.num_agents, 1, self.height, self.width), dtype=self.dtype,
                              device=self.device, requires_grad=False)
@@ -436,11 +451,11 @@ class TreasureHunt(MultiagentVecEnv):
         img += orientation_highlights.expand_as(img)
 
         # Add treasure
-        per_env_lasers = self.treasure.reshape(self.num_envs, 1, self.height, self.width).sum(dim=1).gt(0.5)
+        per_env_treasure = self.treasure.reshape(self.num_envs, 1, self.height, self.width).sum(dim=1).gt(self.treasure_refresh_rate+0.5)
         # Convert to NHWC axes for easier indexing here
         img = img.permute((0, 2, 3, 1))
         laser_colour = torch.tensor([127, 127, 31], device=self.device, dtype=torch.short)
-        img[per_env_lasers] = laser_colour
+        img[per_env_treasure] = laser_colour
         # Convert back to NCHW axes
         img = img.permute((0, 3, 1, 2))
 
