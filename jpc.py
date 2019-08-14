@@ -37,9 +37,9 @@ def worker(i, j):
     models = []
     for model_path in model_locations:
         models.append(
-            agents.GRUAgent(
-                num_actions=env.num_actions, num_initial_convs=2, in_channels=INPUT_CHANNELS, conv_channels=32,
-                num_residual_convs=2, num_feedforward=1, feedforward_dim=64).to(device=args.device, dtype=experiment_args.dtype)
+            agents.RecurrentAgent(recurrent_module=args.agent_type, num_actions=env.num_actions,
+                                  in_channels=INPUT_CHANNELS, channels=16, fc_size=32, hidden_size=32
+                                  ).to(device=args.device, dtype=args.dtype)
         )
         models[-1].load_state_dict(torch.load(model_path, map_location=args.device))
 
@@ -91,6 +91,7 @@ if __name__ == '__main__':
     old_args = open(argsfile).read().replace('python ', '')
     experiment_args = parser.parse_args(old_args.split())
     experiment_args.dtype = arguments.get_dtype(experiment_args.dtype)
+    args.dtype = arguments.get_dtype(args.dtype)
 
     # Find all models to run by searching the models folder for all species and repeats of
     # a certain number of training steps
@@ -118,10 +119,14 @@ if __name__ == '__main__':
 
     indices = list(product(range(n_repeats), range(n_repeats)))
 
-    pool = Pool(args.n_processes)
-    try:
-        pool.starmap(worker, indices)
-    except KeyboardInterrupt:
-        raise Exception
-    finally:
-        pool.close()
+    if args.n_processes > 1:
+        pool = Pool(args.n_processes)
+        try:
+            pool.starmap(worker, indices)
+        except KeyboardInterrupt:
+            raise Exception
+        finally:
+            pool.close()
+    else:
+        for i, j in indices:
+            worker(i, j)
