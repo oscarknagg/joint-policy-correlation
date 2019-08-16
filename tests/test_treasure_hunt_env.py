@@ -72,12 +72,9 @@ def _test_action_sequence(test_fixture, env, all_actions, expected_orientations=
             agent: agent_actions[i] for agent, agent_actions in all_actions.items()
         }
 
-        print(env.treasure[0, 0])
         obs, rewards, dones, info = env.step(actions)
         render(env)
         env.check_consistency()
-        print(i, env.rewards, expected_reward[i])
-        print('-'*20)
 
         if expected_x is not None:
             test_fixture.assertTrue(torch.equal(env.x.cpu(), expected_x[i]))
@@ -96,6 +93,31 @@ def _test_action_sequence(test_fixture, env, all_actions, expected_orientations=
 
 
 class TestTreasureHunt(unittest.TestCase):
+    def test_random_actions(self):
+        """Tests a very large number of random actions and checks for environment consistency
+        instead of any particular expected trajectory."""
+        torch.random.manual_seed(0)
+        num_envs = 128
+        num_steps = 512
+        num_agents = 2
+        obs_fn = observations.FirstPersonCrop(
+            first_person_rotation=True,
+            in_front=9,
+            behind=2,
+            side=4,
+            padding_value=127
+        )
+        env = TreasureHunt(num_envs=num_envs, num_agents=2, height=9, width=9, verbose=False,
+                       map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE), observation_fn=obs_fn,
+                       render_args={'num_rows': 3, 'num_cols': 3, 'size': 256},
+                       device=DEFAULT_DEVICE, strict=True)
+        all_actions = {
+            f'agent_{i}': torch.randint(env.num_actions, size=(num_steps, num_envs)).long().to(DEFAULT_DEVICE) for i in
+            range(num_agents)
+        }
+
+        _test_action_sequence(self, env, all_actions)
+
     def test_dig(self):
         env = get_test_env(num_envs=1)
         all_actions = {

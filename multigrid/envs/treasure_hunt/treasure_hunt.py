@@ -190,11 +190,17 @@ class TreasureHunt(MultiagentVecEnv):
             ).view(self.num_envs, self.num_agents, self.height, self.width).sum(dim=1, keepdim=True)
             dig_zones = dig_counts.gt(self.diggers_needed-0.5)
             found_treasure = dig_zones & self.treasure.gt(self.treasure_refresh_rate+0.5)
-            self.rewards += found_treasure.view(self.num_envs, -1).sum(dim=1).float()
+            # Agents get reward for all treasure found in their env
+            self.rewards += found_treasure\
+                .view(self.num_envs, -1).sum(dim=1) \
+                .repeat_interleave(self.num_agents) \
+                .float()
             self.treasure[found_treasure] = 1
 
         # Refresh treasure
-        self.treasure[self.treasure.gt(0.5)] += 1
+        # But only if an agent is not standing on it already
+        _agents = self.agents.view(self.num_envs, self.num_agents, self.height, self.width).sum(dim=1, keepdim=True)
+        self.treasure[self.treasure.gt(0.5) & (~_agents.gt(0.5))] += 1
         self.treasure.clamp_(0, self.treasure_refresh_rate + 1)
 
         self.env_lifetimes += 1
