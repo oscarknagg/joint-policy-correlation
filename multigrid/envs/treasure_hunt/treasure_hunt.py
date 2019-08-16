@@ -241,7 +241,8 @@ class TreasureHunt(MultiagentVecEnv):
         if torch.any(done):
             num_done = done.sum().item()
             agent_dones = done.repeat_interleave(self.num_agents)
-            new_agents, new_orientations, new_dones, new_hp, new_pathing, new_respawns = self._create_envs(num_done)
+            new_agents, new_orientations, new_dones, new_hp, new_pathing, new_respawns, new_treasure = \
+                self._create_envs(num_done)
             self.agents[agent_dones] = new_agents
             self.orientations[agent_dones] = new_orientations
             self.dones[agent_dones] = new_dones
@@ -249,6 +250,7 @@ class TreasureHunt(MultiagentVecEnv):
             # If we are using a fixed MapGenerator these lines won't do anything
             self.pathing[done] = new_pathing
             self.respawns[done] = new_respawns
+            self.treasure[done] = new_treasure
 
             self.env_lifetimes[done] = 0
 

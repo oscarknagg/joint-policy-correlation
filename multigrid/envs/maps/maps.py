@@ -10,7 +10,10 @@ from multigrid.envs.maps.procedural import generate_random_mazes, generate_rando
 
 handcrafted_maps = {
     'laser_tag': LASER_TAG_MAPS,
-    'treasure_hunt': TREASURE_HUNT_MAPS
+    'treasure_hunt': TREASURE_HUNT_MAPS,
+    # Aliases
+    'laser': LASER_TAG_MAPS,
+    'treasure': TREASURE_HUNT_MAPS,
 }
 
 
