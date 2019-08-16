@@ -22,7 +22,7 @@ torch.random.manual_seed(3)
 
 def get_test_env(num_envs=2):
     # Same as maps.maps.small2 map from the Deepmind paper
-    env = LaserTag(num_envs, 2, height=size, width=size, map_generator=MapFromString(maps.small2, DEFAULT_DEVICE),
+    env = LaserTag(num_envs, 2, height=size, width=size, map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE),
                    manual_setup=True, colour_mode='fixed', strict=True)
     for i in range(num_envs):
         env.agents[2*i, :, 1, 1] = 1
@@ -102,7 +102,7 @@ class TestLaserTag(unittest.TestCase):
             padding_value=127
         )
         env = LaserTag(num_envs=num_envs, num_agents=2, height=9, width=9, verbose=False,
-                       map_generator=MapFromString(maps.small2, DEFAULT_DEVICE), observation_fn=obs_fn,
+                       map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE), observation_fn=obs_fn,
                        render_args={'num_rows': 3, 'num_cols': 3, 'size': 256},
                        device=DEFAULT_DEVICE, strict=True)
         all_actions = {
@@ -369,7 +369,7 @@ class TestLaserTag(unittest.TestCase):
     def test_observations(self):
         obs_fn = observations.RenderObservations()
         env = LaserTag(num_envs=1, num_agents=2, height=9, width=9,
-                       map_generator=MapFromString(maps.small2, DEFAULT_DEVICE), observation_fn=obs_fn,
+                       map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE), observation_fn=obs_fn,
                        device=DEFAULT_DEVICE, strict=True)
 
         agent_obs = obs_fn.observe(env)
@@ -403,7 +403,7 @@ class TestLaserTag(unittest.TestCase):
     def test_create_envs(self):
         obs_fn = observations.RenderObservations()
         env = LaserTag(num_envs=16, num_agents=2, height=9, width=9,
-                       map_generator=MapFromString(maps.small2, DEFAULT_DEVICE), observation_fn=obs_fn,
+                       map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE), observation_fn=obs_fn,
                        device=DEFAULT_DEVICE, strict=True)
         env.check_consistency()
 
@@ -417,7 +417,8 @@ class TestLaserTag(unittest.TestCase):
 
 class TestSmall3(unittest.TestCase):
     def test_firing_orientations_1_3(self):
-        env = LaserTag(num_envs=1, num_agents=2, height=9, width=16, map_generator=MapFromString(maps.small3, DEFAULT_DEVICE),
+        env = LaserTag(num_envs=1, num_agents=2, height=9, width=16,
+                       map_generator=FixedMapGenerator(parse_mapstring(maps.small3), DEFAULT_DEVICE),
                        device=DEFAULT_DEVICE, colour_mode='fixed', strict=True)
 
         env.agents = torch.zeros_like(env.agents)
@@ -448,7 +449,7 @@ class TestSmall3(unittest.TestCase):
             render(env)
 
     def test_firing_orientations_0_2(self):
-        env = LaserTag(num_envs=1, num_agents=2, height=9, width=16, map_generator=MapFromString(maps.small3, DEFAULT_DEVICE),
+        env = LaserTag(num_envs=1, num_agents=2, height=9, width=16, map_generator=FixedMapGenerator(parse_mapstring(maps.small3), DEFAULT_DEVICE),
                        device=DEFAULT_DEVICE, colour_mode='fixed', strict=True)
 
         env.agents = torch.zeros_like(env.agents)
@@ -494,10 +495,9 @@ class TestSmall3(unittest.TestCase):
         # env = LaserTag(num_envs=1, num_agents=2, height=9, width=16, map_generator=MapFromString(maps.small3, DEFAULT_DEVICE),
         #                device=DEFAULT_DEVICE, colour_mode='fixed', strict=True)
 
-        env = LaserTag(num_envs=1, num_agents=2, height=14, width=22, map_generator=MapFromString(maps.small4, DEFAULT_DEVICE),
+        env = LaserTag(num_envs=1, num_agents=2, height=14, width=22, map_generator=FixedMapGenerator(parse_mapstring(maps.small4), DEFAULT_DEVICE),
                        device=DEFAULT_DEVICE, colour_mode='fixed', strict=True)
 
-        render_envs = True
         agent_obs = obs_fn.observe(env)
         for agent, obs in agent_obs.items():
             if render_envs:
@@ -508,15 +508,3 @@ class TestSmall3(unittest.TestCase):
         if render_envs:
             env.render()
             sleep(5)
-
-
-# class TestMaps(unittest.TestCase):
-#     def test_map_pool(self):
-#         map_pool = [
-#             MapFromString(maps.small2, DEFAULT_DEVICE),
-#             MapFromString(maps.small2b, DEFAULT_DEVICE),
-#         ]
-#
-#         map_generator = MapPool(map_pool)
-#
-#         new_maps = map_generator.generate(5)
