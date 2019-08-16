@@ -252,6 +252,15 @@ class LogEnricher(Callback):
                     f'errors': self.env.errors.sum().item()
                 })
 
+            if isinstance(self.env, envs.TreasureHunt):
+                num_digs = infos[f'action_7_{i}'].float().sum().item()
+                successful_dig_rate = infos[f'reward_{i}'].float().sum().item() / num_digs if num_digs > 0 else 0
+                logs.update({
+                    f'dig_rate_{i}': num_digs,
+                    f'successful_dig_rate_{i}': successful_dig_rate,
+                    f'errors': self.env.errors.sum().item()
+                })
+
 
 class VideoLogger(Callback):
     def __init__(self, env: MultiagentVecEnv, save_folder: str):
