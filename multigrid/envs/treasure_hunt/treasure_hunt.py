@@ -45,7 +45,7 @@ class TreasureHunt(MultiagentVecEnv):
                  initial_hp: int = 2,
                  render_args: dict = None,
                  env_lifetime: int = 1000,
-                 treasure_refresh_rate: int = 10,
+                 treasure_refresh_rate: int = 20,
                  dtype: torch.dtype = torch.float,
                  device: str = DEFAULT_DEVICE):
         super(TreasureHunt, self).__init__(num_envs, num_agents, height, width, dtype, device)

@@ -237,7 +237,7 @@ def get_models(args: argparse.Namespace, num_actions: int, device: str) -> List[
             models.append(
                 agents.ConvAgent(
                     num_actions=num_actions, num_initial_convs=2, in_channels=INPUT_CHANNELS, conv_channels=32,
-                    num_residual_convs=2, num_feedforward=1, feedforward_dim=64).to(device=device,
+                    num_residual_convs=2, num_feedforward=1, feedforward_dim=32).to(device=device,
                                                                                     dtype=args.dtype)
             )
         elif args.agent_type in ('lstm', 'gru'):
