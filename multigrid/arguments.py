@@ -1,6 +1,6 @@
 import argparse
 from torch import nn, optim
-from typing import List, Optional
+from typing import List, Optional, Dict
 import os
 import torch
 
@@ -51,6 +51,9 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPa
 
 def add_training_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument('--train', default=True, type=get_bool)
+    parser.add_argument('--batch-norm', default=False, type=get_bool)
+    parser.add_argument('--n-pool', default=1, type=int)
+    parser.add_argument('--pool-steps', default=1000, type=int)
     parser.add_argument('--value-loss-coeff', default=1.0, type=float)
     parser.add_argument('--entropy', default=0.01, type=float)
     parser.add_argument('--max-grad-norm', default=0.5, type=float)
@@ -204,9 +207,7 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
     return env
 
 
-def get_models(args: argparse.Namespace, num_actions: int, device: str) -> List[nn.Module]:
-    num_models = args.n_species
-
+def get_models(args: argparse.Namespace, num_agent_types: int, num_actions: int, device: str) -> Dict[str, List[nn.Module]]:
     # Quick hack to make it easier to input all of the species trained in one particular experiment
     if args.agent_location is not None:
         if len(args.agent_location) == 1:
@@ -219,95 +220,112 @@ def get_models(args: argparse.Namespace, num_actions: int, device: str) -> List[
             else:
                 args.agent_location = [args.agent_location[0], ] * args.n_agents
 
-    models: List[nn.Module] = []
-    for i in range(num_models):
-        # Check for existence of model file
-        if args.agent_location is None or args.agent_location == []:
-            specified_model_file = False
-        else:
-            model_path = args.agent_location[i]
-            model_relative_path = os.path.join(PATH, 'models', args.agent_location[i])
-            if os.path.exists(model_path) or os.path.exists(model_relative_path):
-                specified_model_file = True
-            else:
+    # if args.agent_location is not None:
+    models: Dict[str, List[nn.Module]] = {f'agent_{i}': [] for i in range(num_agent_types)}
+    for i_agent_type in range(num_agent_types):
+        for i_model in range(args.n_pool):
+            # Check for existence of model file
+            if args.agent_location is None or args.agent_location == []:
                 specified_model_file = False
+            else:
+                model_path = args.agent_location[i_agent_type][i_model]
+                model_relative_path = os.path.join(PATH, 'models', args.agent_location[i_agent_type][i_model])
+                if os.path.exists(model_path) or os.path.exists(model_relative_path):
+                    specified_model_file = True
+                else:
+                    specified_model_file = False
 
-        # Create model class
-        if args.agent_type in ('lstm', 'gru'):
-            models.append(
-                agents.RecurrentAgent(recurrent_module=args.agent_type, num_actions=num_actions, in_channels=INPUT_CHANNELS,
-                                      channels=16, fc_size=32, hidden_size=32).to(device=device, dtype=args.dtype)
-            )
-        elif args.agent_type == 'random':
-            models.append(agents.RandomAgent(num_actions=num_actions, device=device))
-        else:
-            raise ValueError('Unrecognised agent type.')
+            # Create model class
+            if args.agent_type in ('lstm', 'gru'):
+                models[f'agent_{i_agent_type}'].append(
+                    agents.RecurrentAgent(recurrent_module=args.agent_type, num_actions=num_actions,
+                                          in_channels=INPUT_CHANNELS, channels=16, fc_size=32, hidden_size=32,
+                                          batch_norm=args.batch_norm).to(device=device, dtype=args.dtype)
+                )
+            elif args.agent_type == 'random':
+                models[f'agent_{i_agent_type}'].append(agents.RandomAgent(num_actions=num_actions, device=device))
+            else:
+                raise ValueError('Unrecognised agent type.')
 
-        # Load state dict if the model file(s) have been specified
-        if specified_model_file:
-            print('Reloading agent {} from location {}'.format(i, args.agent_location[i]))
-            models[i].load_state_dict(
-                utils.load_state_dict(args.agent_location[i])
-            )
+            # Load state dict if the model file(s) have been specified
+            if specified_model_file:
+                print('Reloading agent={} model={} from location {}'.format(
+                    i_agent_type,
+                    i_model,
+                    args.agent_location[i_agent_type][i_model]
+                ))
+                models[f'agent_{i_agent_type}'][i_model].load_state_dict(
+                    utils.load_state_dict(args.agent_location[i_agent_type][i_model])
+                )
+
+            # Add agent attributes
+            models[f'agent_{i_agent_type}'][-1].agent_id = i_agent_type
+            models[f'agent_{i_agent_type}'][-1].pool_id = i_model
+            models[f'agent_{i_agent_type}'][-1].train_steps = 0
+            models[f'agent_{i_agent_type}'][-1].train_episodes = 0
+            models[f'agent_{i_agent_type}'][-1].last_saved_steps = 0
+            models[f'agent_{i_agent_type}'][-1].num_checkpoints = 0
 
     if args.train:
-        for m in models:
-            m.train()
+        for agent, _models in models.items():
+            for m in _models:
+                m.train()
     else:
         torch.no_grad()
-        for m in models:
-            m.eval()
-            for param in m.parameters():
-                param.requires_grad = False
+        for agent, _models in models.items():
+            for m in _models:
+                m.eval()
+                for param in m.parameters():
+                    param.requires_grad = False
 
     return models
 
 
-def get_trainers(args: argparse.Namespace, models: List[nn.Module]) -> Optional[rl.core.MultiAgentTrainer]:
+def get_trainers(args: argparse.Namespace,
+                 num_agent_types: int,
+                 models: Dict[str, List[nn.Module]]) -> Optional[Dict[str, List[rl.core.SingleAgentTrainer]]]:
     if args.train:
-        if args.train_algo == 'a2c':
-            a2c_trainers = []
-            for i, m in enumerate(models):
-                a2c_trainers.append(
-                    rl.A2CTrainer(
-                        agent_id=f'agent_{i}',
-                        model=m,
-                        update_steps=args.update_steps,
-                        optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=args.weight_decay),
-                        a2c=rl.ActorCritic(gamma=args.gamma, normalise_returns=args.norm_returns, dtype=args.dtype,
-                                           use_gae=args.gae_lambda is not None, gae_lambda=args.gae_lambda),
-                        max_grad_norm=args.max_grad_norm,
-                        value_loss_coeff=args.value_loss_coeff,
-                        entropy_loss_coeff=args.entropy,
-                        mask_dones=args.mask_dones
+        trainers = {f'agent_{i}': [] for i in range(num_agent_types)}
+        for i_agent_type, (agent_type, _models) in enumerate(models.items()):
+            for i, m in enumerate(_models):
+                if args.train_algo == 'a2c':
+                    trainers[agent_type].append(
+                        rl.A2CTrainer(
+                            agent_id=f'agent_{i_agent_type}',
+                            model=m,
+                            update_steps=args.update_steps,
+                            optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=args.weight_decay),
+                            a2c=rl.ActorCritic(gamma=args.gamma, normalise_returns=args.norm_returns, dtype=args.dtype,
+                                               use_gae=args.gae_lambda is not None, gae_lambda=args.gae_lambda),
+                            max_grad_norm=args.max_grad_norm,
+                            value_loss_coeff=args.value_loss_coeff,
+                            entropy_loss_coeff=args.entropy,
+                            mask_dones=args.mask_dones
+                        )
                     )
-                )
-            rl_trainer = rl.core.IndependentTrainer(a2c_trainers)
-        elif args.train_algo == 'ppo':
-            ppo_trainers = []
-            for i, m in enumerate(models):
-                ppo_trainers.append(
-                    rl.PPOTrainer(
-                        agent_id=f'agent_{i}',
-                        model=m,
-                        update_steps=args.update_steps,
-                        optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=args.weight_decay),
-                        a2c=rl.ActorCritic(gamma=args.gamma, normalise_returns=args.norm_returns, dtype=args.dtype,
-                                           use_gae=args.gae_lambda is not None, gae_lambda=args.gae_lambda),
-                        max_grad_norm=args.max_grad_norm,
-                        value_loss_coeff=args.value_loss_coeff,
-                        entropy_loss_coeff=args.entropy,
-                        mask_dones=args.mask_dones,
-                        # PPO specific arguments
-                        batch_size=args.ppo_batch,
-                        epochs=args.ppo_epochs,
-                        eta_clip=args.ppo_eta_clip,
+                elif args.train_algo == 'ppo':
+                    trainers[agent_type].append(
+                        rl.PPOTrainer(
+                            agent_id=f'agent_{i_agent_type}',
+                            model=m,
+                            update_steps=args.update_steps,
+                            optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=args.weight_decay),
+                            a2c=rl.ActorCritic(gamma=args.gamma, normalise_returns=args.norm_returns,
+                                               dtype=args.dtype,
+                                               use_gae=args.gae_lambda is not None, gae_lambda=args.gae_lambda),
+                            max_grad_norm=args.max_grad_norm,
+                            value_loss_coeff=args.value_loss_coeff,
+                            entropy_loss_coeff=args.entropy,
+                            mask_dones=args.mask_dones,
+                            # PPO specific arguments
+                            batch_size=args.ppo_batch,
+                            epochs=args.ppo_epochs,
+                            eta_clip=args.ppo_eta_clip,
+                        )
                     )
-                )
-            rl_trainer = rl.core.IndependentTrainer(ppo_trainers)
-        else:
-            raise ValueError('Unrecognised algorithm.')
+                else:
+                    raise ValueError('Unrecognised algorithm.')
     else:
-        rl_trainer = None
+        trainers = None
 
-    return rl_trainer
+    return trainers

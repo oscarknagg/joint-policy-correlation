@@ -46,7 +46,7 @@ def worker(i, j):
     interaction_handler = MultiSpeciesHandler(models, experiment_args.n_species, experiment_args.n_agents, experiment_args.agent_type, keep_obs=False)
     print(f'{PATH}/experiments/{args.experiment_folder}/jpc/{i}-{j}.csv')
     callbacks = [
-        loggers.LogEnricher(env),
+        loggers.LoggingHandler(env),
         loggers.CSVLogger(
             filename=f'{PATH}/experiments/{args.experiment_folder}/jpc/{args.model_checkpoint_steps}/{i}-{j}.csv',
         ),

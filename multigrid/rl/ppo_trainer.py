@@ -52,6 +52,9 @@ class PPOTrainer(SingleAgentTrainer):
 
         self.value_loss_clipping = True
 
+    def __repr__(self):
+        return f'PPOTrainer(agent_id={self.agent_id})'
+
     def _generate_batches(self, *tensors: torch.Tensor):
         num_envs = tensors[0].shape[1]
 

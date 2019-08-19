@@ -16,6 +16,7 @@ from multigrid import resume
 from multigrid import observations
 from multigrid.callbacks import loggers
 from multigrid.interaction import MultiSpeciesHandler
+from multigrid.pool import MultiAgentPoolRun
 from config import PATH
 
 
@@ -50,59 +51,77 @@ def worker(repeat: int, device: str, args: argparse.Namespace):
         side=args.obs_side
     )
     env = arguments.get_env(args, observation_function, device)
-    models = arguments.get_models(args, env.num_actions, device)
-    interaction_handler = MultiSpeciesHandler(models, args.n_species, args.n_agents, args.agent_type,
-                                              keep_obs=True if args.train_algo == 'ppo' else False)
-    rl_trainer = arguments.get_trainers(args, models)
+    models = arguments.get_models(args, env.num_agents, env.num_actions, device)
+    # interaction_handler = MultiSpeciesHandler(models, args.n_species, args.n_agents, args.agent_type,
+    #                                           keep_obs=True if args.train_algo == 'ppo' else False)
+    rl_trainer = arguments.get_trainers(args, env.num_agents, models)
 
-    callbacks_to_run = [
-        loggers.LogEnricher(env, resume_data.current_steps, resume_data.current_episodes),
-        loggers.PrintLogger(env=args.env, interval=args.print_interval) if args.print_interval is not None else None,
-        callbacks.Render(env, args.fps) if args.render else None,
-        callbacks.ModelCheckpoint(
-            f'{PATH}/experiments/{args.save_folder}/models',
-            f'repeat={repeat}__' + 'steps={steps:.2e}__species={i_species}.pt',
-            models,
-            interval=args.model_interval,
-            s3_bucket=args.s3_bucket,
-            s3_filepath=f'{args.save_folder}/models/repeat={repeat}__' + 'steps={steps:.2e}__species={i_species}.pt'
-        ) if args.save_model else None,
-        loggers.CSVLogger(
-            filename=f'{PATH}/experiments/{args.save_folder}/logs/{save_file}.csv',
-            header_comment=utils.get_comment(args),
-            interval=args.log_interval,
-            append=resume_data.resume,
-            s3_bucket=args.s3_bucket,
-            s3_filename=f'{args.save_folder}/logs/{save_file}.csv',
-            s3_interval=args.s3_interval
-        ) if args.save_logs else None,
-        loggers.VideoLogger(
-            env,
-            f'{PATH}/experiments/{args.save_folder}/videos/'
-        ) if args.save_video else None,
-        loggers.HeatMapLogger(
-            env,
-            save_folder=f'{PATH}/experiments/{args.save_folder}/heatmaps/',
-            interval=args.heatmap_interval
-        ) if args.save_heatmap else None,
-    ]
-    callbacks_to_run = [c for c in callbacks_to_run if c]
-    callback_list = multigrid.core.CallbackList(callbacks_to_run)
-    callback_list.on_train_begin()
+    # callbacks_to_run = [
+    #     loggers.LoggingHandler(env, resume_data.current_steps, resume_data.current_episodes),
+    #     loggers.PrintLogger(env=args.env, interval=args.print_interval) if args.print_interval is not None else None,
+    #     callbacks.Render(env, args.fps) if args.render else None,
+    #     callbacks.ModelCheckpoint(
+    #         f'{PATH}/experiments/{args.save_folder}/models',
+    #         f'repeat={repeat}__' + 'steps={steps:.2e}__species={i_species}.pt',
+    #         models,
+    #         interval=args.model_interval,
+    #         s3_bucket=args.s3_bucket,
+    #         s3_filepath=f'{args.save_folder}/models/repeat={repeat}__' + 'steps={steps:.2e}__species={i_species}.pt'
+    #     ) if args.save_model else None,
+    #     loggers.CSVLogger(
+    #         filename=f'{PATH}/experiments/{args.save_folder}/logs/{save_file}.csv',
+    #         header_comment=utils.get_comment(args),
+    #         interval=args.log_interval,
+    #         append=resume_data.resume,
+    #         s3_bucket=args.s3_bucket,
+    #         s3_filename=f'{args.save_folder}/logs/{save_file}.csv',
+    #         s3_interval=args.s3_interval
+    #     ) if args.save_logs else None,
+    #     loggers.VideoLogger(
+    #         env,
+    #         f'{PATH}/experiments/{args.save_folder}/videos/'
+    #     ) if args.save_video else None,
+    #     loggers.HeatMapLogger(
+    #         env,
+    #         save_folder=f'{PATH}/experiments/{args.save_folder}/heatmaps/',
+    #         interval=args.heatmap_interval
+    #     ) if args.save_heatmap else None,
+    # ]
+    # callbacks_to_run = [c for c in callbacks_to_run if c]
+    # callback_list = multigrid.core.CallbackList(callbacks_to_run)
+    # callback_list.on_train_begin()
     torch.autograd.set_detect_anomaly(True)
-    multiagent_run = core.MultiAgentRun(
+
+    # multiagent_run = core.MultiAgentRun(
+    #     env=env,
+    #     models=models,
+    #     interaction_handler=interaction_handler,
+    #     callbacks=callback_list,
+    #     trainers=rl_trainer,
+    #     warm_start=args.warm_start,
+    #     initial_steps=resume_data.current_steps,
+    #     total_steps=args.total_steps,
+    #     initial_episodes=resume_data.current_episodes,
+    #     total_episodes=args.total_episodes
+    # )
+    # multiagent_run.run()
+
+    multiagent_run = MultiAgentPoolRun(
         env=env,
+        n_pool=args.n_pool,
         models=models,
-        interaction_handler=interaction_handler,
-        callbacks=callback_list,
+        # callbacks=callback_list,
         trainers=rl_trainer,
         warm_start=args.warm_start,
+        schedule_steps=args.pool_steps,
         initial_steps=resume_data.current_steps,
         total_steps=args.total_steps,
         initial_episodes=resume_data.current_episodes,
-        total_episodes=args.total_episodes
+        total_episodes=args.total_episodes,
+        args=args
     )
     multiagent_run.run()
+
     print('-'*20)
 
 
@@ -164,3 +183,4 @@ if __name__ == '__main__':
     else:
         for run_args in worker_args:
             worker(*run_args)
+

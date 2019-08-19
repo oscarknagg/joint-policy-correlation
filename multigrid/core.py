@@ -237,8 +237,12 @@ class MultiAgentRun(object):
             observations, reward, done, info = self.env.step(interaction.actions)
             self.env.reset(done['__all__'], return_observations=False)
             self.env.check_consistency()
+
             num_episodes += done['__all__'].sum().item()
             num_steps += self.env.num_envs
+            for model in self.models:
+                model.train_steps += self.env.num_envs
+                model.train_episodes += done['__all__'].sum().item()
 
             with torch.no_grad():
                 # Reset hidden states on death or on environment reset
@@ -264,7 +268,7 @@ class MultiAgentRun(object):
 
             final_logs.append(logs)
 
-            if num_steps > self.total_steps or num_episodes >= self.total_episodes:
+            if num_steps >= self.total_steps or num_episodes >= self.total_episodes:
                 break
 
         self.callbacks.on_train_end()

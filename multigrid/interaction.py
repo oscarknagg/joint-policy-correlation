@@ -48,14 +48,9 @@ class DeterministcActionSampler(ActionSampler):
     pass
 
 
-class MultiSpeciesHandler(InteractionHandler):
-    """Multiple species as models with unshared weights."""
-    def __init__(self, models: List[nn.Module], n_species: int, n_agents: int, agent_type: str, keep_obs: bool):
-        assert len(models) == n_species
+class AgentPoolHandler(InteractionHandler):
+    def __init__(self, models: Dict[str, nn.Module], keep_obs: bool):
         self.models = models
-        self.n_species = n_species
-        self.n_agents = n_agents
-        self.agent_type = agent_type
         self.keep_obs = keep_obs
 
     def interact(self,
@@ -67,11 +62,50 @@ class MultiSpeciesHandler(InteractionHandler):
         values = {}
         log_probs = {}
         for i, (agent, obs) in enumerate(observations.items()):
-            model = self.models[i * self.n_species // self.n_agents]
-            # if self.agent_type == 'lstm':
+            model = self.models[agent]
             if model.recurrent == 'lstm':
                 probs_, value_, hx[agent], cx[agent] = model(obs, hx[agent], cx[agent])
-            # elif self.agent_type == 'gru':
+            elif model.recurrent == 'gru':
+                probs_, value_, hx[agent] = model(obs, hx[agent])
+            else:
+                probs_, value_ = model(obs)
+
+            action_distributions[agent] = Categorical(probs_)
+            actions[agent] = action_distributions[agent].sample().clone().long()
+            values[agent] = value_
+            log_probs[agent] = action_distributions[agent].log_prob(actions[agent].clone())
+
+        interaction = Interaction(
+            observations=observations if self.keep_obs else None,
+            action_distributions=action_distributions,
+            actions=actions,
+            state_values=values,
+            q_values=None,
+            log_probs=log_probs
+        )
+
+        return interaction, hx, cx
+
+
+class MultiSpeciesHandler(InteractionHandler):
+    """Multiple species as models with unshared weights."""
+    def __init__(self, models: List[nn.Module], n_agents: int, keep_obs: bool):
+        self.models = models
+        self.n_agents = n_agents
+        self.keep_obs = keep_obs
+
+    def interact(self,
+                 observations: Dict[str, Tensor],
+                 hx: Optional[Dict[str, Tensor]],
+                 cx: Optional[Dict[str, Tensor]]) -> (Interaction, Dict[str, Tensor], Dict[str, Tensor]):
+        action_distributions = {}
+        actions = {}
+        values = {}
+        log_probs = {}
+        for i, (agent, obs) in enumerate(observations.items()):
+            model = self.models[i]
+            if model.recurrent == 'lstm':
+                probs_, value_, hx[agent], cx[agent] = model(obs, hx[agent], cx[agent])
             elif model.recurrent == 'gru':
                 probs_, value_, hx[agent] = model(obs, hx[agent])
             else:
