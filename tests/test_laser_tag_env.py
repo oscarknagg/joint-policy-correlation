@@ -7,9 +7,8 @@ from torch.distributions import Categorical
 
 from multigrid.envs import LaserTag
 from multigrid.envs.laser_tag import maps
-from multigrid.envs.laser_tag.map_generators import MapFromString, MapPool
+from multigrid.envs.maps import parse_mapstring, FixedMapGenerator
 from multigrid import observations
-from multigrid.agents import GRUAgent
 from tests._laser_trajectories import expected_laser_trajectories_0_2, expected_laser_trajectories_1_3
 from config import DEFAULT_DEVICE, PATH
 
@@ -23,7 +22,7 @@ torch.random.manual_seed(3)
 
 def get_test_env(num_envs=2):
     # Same as maps.maps.small2 map from the Deepmind paper
-    env = LaserTag(num_envs, 2, height=size, width=size, map_generator=MapFromString(maps.small2, DEFAULT_DEVICE),
+    env = LaserTag(num_envs, 2, height=size, width=size, map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE),
                    manual_setup=True, colour_mode='fixed', strict=True)
     for i in range(num_envs):
         env.agents[2*i, :, 1, 1] = 1
@@ -103,7 +102,7 @@ class TestLaserTag(unittest.TestCase):
             padding_value=127
         )
         env = LaserTag(num_envs=num_envs, num_agents=2, height=9, width=9, verbose=False,
-                       map_generator=MapFromString(maps.small2, DEFAULT_DEVICE), observation_fn=obs_fn,
+                       map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE), observation_fn=obs_fn,
                        render_args={'num_rows': 3, 'num_cols': 3, 'size': 256},
                        device=DEFAULT_DEVICE, strict=True)
         all_actions = {
@@ -112,61 +111,6 @@ class TestLaserTag(unittest.TestCase):
         }
 
         _test_action_sequence(self, env, all_actions)
-
-    @pytest.mark.skip()
-    def test_agent_actions(self):
-        """Tests a very large number of actions using pretrained agents and checks for environment consistency. This
-        complements the random actions test as it tests trajectories that are more likely to occur when training
-        agents."""
-        pretrained_agents = [
-            f'{PATH}/models/jpc-0a/env=laser__n_envs=128__n_agents=2__n_species=2__agent=gru__r=2__lr=0.001__gamma=0.99__update_steps=5__entropy=0.05__laser_tag_map=small2__species=1.pt',
-            # f'{PATH}/tests/data/pretrained_gru_agent_0.pt',
-            f'{PATH}/models/jpc-0a/env=laser__n_envs=128__n_agents=2__n_species=2__agent=gru__r=2__lr=0.001__gamma=0.99__update_steps=5__entropy=0.05__laser_tag_map=small2__species=1.pt',
-            # f'{PATH}/tests/data/pretrained_gru_agent_1.pt',
-        ]
-        num_envs = 32
-        num_steps = 128
-        num_agents = 2
-        obs_fn = observations.FirstPersonCrop(
-            first_person_rotation=True,
-            in_front=11,
-            behind=2,
-            side=6,
-            padding_value=127
-        )
-        env = LaserTag(num_envs=num_envs, num_agents=2, height=9, width=9, verbose=False,
-                       map_generator=MapFromString(maps.small2, DEFAULT_DEVICE), observation_fn=obs_fn,
-                       render_args={'num_rows': 3, 'num_cols': 3, 'size': 256},
-                       device=DEFAULT_DEVICE, strict=True, colour_mode='fixed')
-
-        # Get models
-        models = []
-        for i in range(num_agents):
-            m = GRUAgent(
-                num_actions=env.num_actions, num_initial_convs=2, in_channels=3, conv_channels=32,
-                num_residual_convs=2, num_feedforward=1, feedforward_dim=64).to(device=DEFAULT_DEVICE, dtype=torch.float)
-            m.load_state_dict(torch.load(pretrained_agents[i]))
-            models.append(m)
-
-        with torch.no_grad():
-            # Setup env
-            hidden_states = {f'agent_{i}': torch.zeros((num_envs, 64), device=DEFAULT_DEVICE) for i in range(num_agents)}
-            obs = env.reset()
-
-            for i_step in range(num_steps):
-                print('-'*20, i_step, '-'*20)
-                actions = {}
-                for i, (agent, obs) in enumerate(obs.items()):
-                    model = models[i]
-                    probs_, value_, hidden_states[agent] = model(obs, hidden_states.get(agent))
-                    action_distribution = Categorical(probs_)
-                    actions[agent] = action_distribution.sample().clone().long()
-
-                obs, reward, done, info = env.step(actions)
-                # env.render(env=19)
-                # sleep(0.3)
-                env.reset(done['__all__'], return_observations=False)
-                env.check_consistency()
 
     def test_basic_movement(self):
         """2 agents rotate completely on the spot then move in a circle."""
@@ -425,7 +369,7 @@ class TestLaserTag(unittest.TestCase):
     def test_observations(self):
         obs_fn = observations.RenderObservations()
         env = LaserTag(num_envs=1, num_agents=2, height=9, width=9,
-                       map_generator=MapFromString(maps.small2, DEFAULT_DEVICE), observation_fn=obs_fn,
+                       map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE), observation_fn=obs_fn,
                        device=DEFAULT_DEVICE, strict=True)
 
         agent_obs = obs_fn.observe(env)
@@ -459,7 +403,7 @@ class TestLaserTag(unittest.TestCase):
     def test_create_envs(self):
         obs_fn = observations.RenderObservations()
         env = LaserTag(num_envs=16, num_agents=2, height=9, width=9,
-                       map_generator=MapFromString(maps.small2, DEFAULT_DEVICE), observation_fn=obs_fn,
+                       map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE), observation_fn=obs_fn,
                        device=DEFAULT_DEVICE, strict=True)
         env.check_consistency()
 
@@ -473,7 +417,8 @@ class TestLaserTag(unittest.TestCase):
 
 class TestSmall3(unittest.TestCase):
     def test_firing_orientations_1_3(self):
-        env = LaserTag(num_envs=1, num_agents=2, height=9, width=16, map_generator=MapFromString(maps.small3, DEFAULT_DEVICE),
+        env = LaserTag(num_envs=1, num_agents=2, height=9, width=16,
+                       map_generator=FixedMapGenerator(parse_mapstring(maps.small3), DEFAULT_DEVICE),
                        device=DEFAULT_DEVICE, colour_mode='fixed', strict=True)
 
         env.agents = torch.zeros_like(env.agents)
@@ -504,7 +449,7 @@ class TestSmall3(unittest.TestCase):
             render(env)
 
     def test_firing_orientations_0_2(self):
-        env = LaserTag(num_envs=1, num_agents=2, height=9, width=16, map_generator=MapFromString(maps.small3, DEFAULT_DEVICE),
+        env = LaserTag(num_envs=1, num_agents=2, height=9, width=16, map_generator=FixedMapGenerator(parse_mapstring(maps.small3), DEFAULT_DEVICE),
                        device=DEFAULT_DEVICE, colour_mode='fixed', strict=True)
 
         env.agents = torch.zeros_like(env.agents)
@@ -550,10 +495,9 @@ class TestSmall3(unittest.TestCase):
         # env = LaserTag(num_envs=1, num_agents=2, height=9, width=16, map_generator=MapFromString(maps.small3, DEFAULT_DEVICE),
         #                device=DEFAULT_DEVICE, colour_mode='fixed', strict=True)
 
-        env = LaserTag(num_envs=1, num_agents=2, height=14, width=22, map_generator=MapFromString(maps.small4, DEFAULT_DEVICE),
+        env = LaserTag(num_envs=1, num_agents=2, height=14, width=22, map_generator=FixedMapGenerator(parse_mapstring(maps.small4), DEFAULT_DEVICE),
                        device=DEFAULT_DEVICE, colour_mode='fixed', strict=True)
 
-        render_envs = True
         agent_obs = obs_fn.observe(env)
         for agent, obs in agent_obs.items():
             if render_envs:
@@ -564,15 +508,3 @@ class TestSmall3(unittest.TestCase):
         if render_envs:
             env.render()
             sleep(5)
-
-
-# class TestMaps(unittest.TestCase):
-#     def test_map_pool(self):
-#         map_pool = [
-#             MapFromString(maps.small2, DEFAULT_DEVICE),
-#             MapFromString(maps.small2b, DEFAULT_DEVICE),
-#         ]
-#
-#         map_generator = MapPool(map_pool)
-#
-#         new_maps = map_generator.generate(5)

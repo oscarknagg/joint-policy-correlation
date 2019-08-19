@@ -70,8 +70,7 @@ class TestMultiSnakeEnv(unittest.TestCase):
 
         obs_h = 5
         obs_w = 5
-        crop_filter = torch.ones((1, 1, obs_h, obs_w), device=DEFAULT_DEVICE)
-        obs_fn = observations.FirstPersonCrop(crop_filter)
+        obs_fn = observations.FirstPersonCrop(obs_h, obs_w)
 
         # Create some environments and run random actions for N steps, checking for consistency at each step
         env = Slither(num_envs=num_envs, num_agents=2, height=size, width=size, manual_setup=False, verbose=True,
@@ -106,8 +105,7 @@ class TestMultiSnakeEnv(unittest.TestCase):
 
         obs_h = 5
         obs_w = 5
-        crop_filter = torch.ones((1, 1, obs_h, obs_w), device=DEFAULT_DEVICE)
-        obs_fn = observations.FirstPersonCrop(crop_filter)
+        obs_fn = observations.FirstPersonCrop(obs_h, obs_w)
         # Create some environments and run random actions for N steps, checking for consistency at each step
         env = Slither(num_envs=num_envs, num_agents=num_snakes, height=25, width=25,  manual_setup=False, boost=True,
                       verbose=True,  render_args={'num_rows': 1, 'num_cols': 2, 'size': 256},
@@ -643,8 +641,7 @@ class TestMultiSnakeEnv(unittest.TestCase):
 
         obs_h = 5
         obs_w = 5
-        crop_filter = torch.ones((1, 1, obs_h, obs_w), device=DEFAULT_DEVICE)
-        obs_fn = observations.FirstPersonCrop(crop_filter)
+        obs_fn = observations.FirstPersonCrop(obs_h, obs_w)
         env = Slither(num_envs=num_envs, num_agents=num_snakes, height=25, width=25, manual_setup=False, boost=True,
                       observation_fn=obs_fn,
                       render_args={'num_rows': 1, 'num_cols': 2, 'size': 256},

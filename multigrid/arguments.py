@@ -4,8 +4,8 @@ from typing import List, Optional
 import os
 import torch
 
-from multigrid.envs import LaserTag, Slither
-from multigrid.envs.laser_tag.map_generators import MapFromString, MapPool, FixedMapGenerator, Random, MapFromFile
+from multigrid.envs import LaserTag, Slither, TreasureHunt
+from multigrid.envs.maps import parse_mapstring, MapPool, Random, maps_from_file, FixedMapGenerator
 from multigrid.observations import ObservationFunction
 from multigrid import rl
 from multigrid import utils
@@ -30,6 +30,7 @@ def get_dtype(dtype) -> torch.dtype:
 
 def add_common_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument('--env', type=str)
+    parser.add_argument('--env-map', nargs='+', type=str, default='random')
     parser.add_argument('--n-envs', type=int)
     parser.add_argument('--n-agents', type=int)
     parser.add_argument('--n-species', type=int, default=1)
@@ -100,7 +101,6 @@ def add_snake_env_arguments(parser: argparse.ArgumentParser) -> argparse.Argumen
 
 
 def add_laser_tag_env_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-    parser.add_argument('--laser-tag-map', nargs='+', type=str, default='random')
     parser.add_argument('--pathing-file', type=str)
     parser.add_argument('--respawn-file', type=str)
     # Random map generation arguments
@@ -108,6 +108,11 @@ def add_laser_tag_env_arguments(parser: argparse.ArgumentParser) -> argparse.Arg
     parser.add_argument('--maze-density', type=float)
     parser.add_argument('--n-respawns', type=int)
     parser.add_argument('--n-maps', type=int, default=None)
+    return parser
+
+
+def add_treasure_hunt_env_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    parser.add_argument('--treasure-file', type=str)
     return parser
 
 
@@ -152,25 +157,45 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
                       respawn_mode=args.respawn_mode, food_mode=args.food_mode, observation_fn=observation_fn,
                       reward_on_death=args.reward_on_death, agent_colours=args.colour_mode)
     elif args.env == 'laser':
-        if len(args.laser_tag_map) == 1:
-            if args.laser_tag_map[0] == 'random':
+        if len(args.env_map) == 1:
+            if args.env_map[0] == 'random':
                 # Generate n_maps random mazes to select from at random during each map reset
-                map_generator = Random(args.n_maps, args.n_respawns, args.height, args.width, args.maze_complexity,
+                map_generator = Random(args.n_respawns, args.height, args.width, args.maze_complexity,
                                        args.maze_density, args.device)
-            elif args.laser_tag_map[0] == 'from_file':
-                map_generator = MapFromFile(args.pathing_file, args.respawn_file, args.device, args.n_maps)
+            elif args.env_map[0] == 'from_file':
+                maps = maps_from_file(args.pathing_file, args.respawn_file, args.device, args.n_maps)
+                map_generator = MapPool(maps)
             else:
                 # Single fixed map
-                map_generator = MapFromString(args.laser_tag_map[0], device)
+                map_generator = FixedMapGenerator(parse_mapstring(args.env_map[0]), device)
         else:
-            fixed_maps = [MapFromString(m, device) for m in args.laser_tag_map]
+            fixed_maps = [parse_mapstring(m) for m in args.env_map]
             map_generator = MapPool(fixed_maps)
 
         env = LaserTag(num_envs=args.n_envs, num_agents=args.n_agents, height=args.height, width=args.width,
                        observation_fn=observation_fn, colour_mode=args.colour_mode,
                        map_generator=map_generator, device=device, render_args=render_args, strict=args.strict)
-    elif args.env == 'cooperative':
-        raise NotImplementedError
+    elif args.env == 'treasure':
+        if len(args.env_map) == 1:
+            if args.env_map[0] == 'random':
+                # Generate n_maps random mazes to select from at random during each map reset
+                map_generator = Random(args.n_respawns, args.height, args.width, args.maze_complexity,
+                                       args.maze_density, args.device)
+            elif args.env_map[0] == 'from_file':
+                maps = maps_from_file(args.pathing_file, args.respawn_file, args.device, args.n_maps,
+                                      other_tensors={'treasure': args.treasure_file})
+                map_generator = MapPool(maps)
+            else:
+                # Single fixed map
+                map_generator = FixedMapGenerator(parse_mapstring(args.env_map[0]), device)
+        else:
+            fixed_maps = [parse_mapstring(m) for m in args.env_map]
+            map_generator = MapPool(fixed_maps)
+
+        env = TreasureHunt(num_envs=args.n_envs, num_agents=args.n_agents, height=args.height, width=args.width,
+                           observation_fn=observation_fn, colour_mode=args.colour_mode,
+                           map_generator=map_generator, device=device, render_args=render_args, strict=args.strict)
+
     elif args.env == 'asymmetric':
         raise NotImplementedError
     else:

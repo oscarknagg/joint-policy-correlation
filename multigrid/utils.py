@@ -355,3 +355,17 @@ def load_state_dict(path: str) -> dict:
         state_dict = torch.load(path)
 
     return state_dict
+
+
+def get_coords(input_tensor: torch.Tensor) -> torch.Tensor:
+    batch_size, _, x_dim, y_dim = input_tensor.size()
+    xx_channel = torch.arange(x_dim, device=input_tensor.device).repeat(1, y_dim, 1)
+    yy_channel = torch.arange(y_dim, device=input_tensor.device).repeat(1, x_dim, 1).transpose(1, 2)
+
+    xx_channel = xx_channel.repeat(batch_size, 1, 1, 1).transpose(2, 3)
+    yy_channel = yy_channel.repeat(batch_size, 1, 1, 1).transpose(2, 3)
+    ret = torch.cat([
+            xx_channel.type_as(input_tensor),
+            yy_channel.type_as(input_tensor)], dim=1)
+
+    return ret
