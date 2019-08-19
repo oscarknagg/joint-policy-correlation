@@ -5,7 +5,7 @@ import torch
 
 from multigrid import observations
 from multigrid import envs
-from multigrid.envs.maps.map_generators import MapFromString
+from multigrid.envs.maps.maps import FixedMapGenerator, parse_mapstring
 from multigrid.envs.laser_tag import maps
 from config import DEFAULT_DEVICE
 
@@ -23,7 +23,7 @@ class TestFirstPersonCropping(unittest.TestCase):
             side=6,
             padding_value=127
         )
-        env = envs.LaserTag(num_envs=1, num_agents=4, height=9, width=16, map_generator=MapFromString(maps.small3, DEFAULT_DEVICE),
+        env = envs.LaserTag(num_envs=1, num_agents=4, height=9, width=16, map_generator=FixedMapGenerator(parse_mapstring(maps.small3), DEFAULT_DEVICE),
                             observation_fn=obs_fn, device=DEFAULT_DEVICE)
 
         if render_envs:
