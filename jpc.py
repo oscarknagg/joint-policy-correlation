@@ -120,10 +120,14 @@ if __name__ == '__main__':
 
     indices = list(product(range(n_repeats), range(n_repeats)))
 
-    pool = Pool(args.n_processes)
-    try:
-        pool.starmap(worker, indices)
-    except KeyboardInterrupt:
-        raise Exception
-    finally:
-        pool.close()
+    if args.n_processes > 1:
+        pool = Pool(args.n_processes)
+        try:
+            pool.starmap(worker, indices)
+        except KeyboardInterrupt:
+            raise Exception
+        finally:
+            pool.close()
+    else:
+        for i, j in indices:
+            worker(i, j)
