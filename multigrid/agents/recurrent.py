@@ -17,6 +17,7 @@ class RecurrentAgent(nn.Module):
                  channels: int,
                  fc_size: int,
                  hidden_size: int,
+                 batch_norm: bool = False,
                  flattened_size: int = 144):
         super(RecurrentAgent, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, channels, kernel_size=4, stride=2)
@@ -25,6 +26,13 @@ class RecurrentAgent(nn.Module):
         self.linear = nn.Linear(flattened_size, fc_size)
         self.value_head = nn.Linear(hidden_size, 1)
         self.policy_head = nn.Linear(hidden_size, num_actions)
+        self.batch_norm = batch_norm
+
+        if self.batch_norm:
+            self.bn_conv1 = nn.BatchNorm2d(channels)
+            self.bn_conv2 = nn.BatchNorm2d(channels)
+            self.bn_conv3 = nn.BatchNorm2d(channels)
+            self.bn_linear = nn.BatchNorm1d(hidden_size)
 
         self.recurrent = recurrent_module
         if self.recurrent == 'gru':
@@ -43,11 +51,29 @@ class RecurrentAgent(nn.Module):
                 nn.init.orthogonal_(param)
 
     def forward(self, x: torch.Tensor, h: Optional[torch.Tensor] = None, c: Optional[torch.Tensor] = None):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
+        x = self.conv1(x)
+        if self.batch_norm:
+            x = F.relu(self.bn_conv1(x))
+        else:
+            x = F.relu(x)
 
-        x = F.relu(self.linear(x.view(x.size(0), -1)))
+        x = self.conv2(x)
+        if self.batch_norm:
+            x = F.relu(self.bn_conv2(x))
+        else:
+            x = F.relu(x)
+
+        x = self.conv3(x)
+        if self.batch_norm:
+            x = F.relu(self.bn_conv3(x))
+        else:
+            x = F.relu(x)
+
+        x = self.linear(x.view(x.size(0), -1))
+        if self.batch_norm:
+            x = F.relu(self.bn_linear(x))
+        else:
+            x = F.relu(x)
 
         if self.recurrent == 'gru':
             h = self.lstm(x, h)

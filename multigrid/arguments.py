@@ -51,6 +51,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPa
 
 def add_training_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument('--train', default=True, type=get_bool)
+    parser.add_argument('--batch-norm', default=False, type=get_bool)
     parser.add_argument('--value-loss-coeff', default=1.0, type=float)
     parser.add_argument('--entropy', default=0.01, type=float)
     parser.add_argument('--max-grad-norm', default=0.5, type=float)
@@ -113,6 +114,7 @@ def add_laser_tag_env_arguments(parser: argparse.ArgumentParser) -> argparse.Arg
 
 def add_treasure_hunt_env_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument('--treasure-file', type=str)
+    parser.add_argument('--treasure-refresh', type=int, default=20)
     return parser
 
 
@@ -193,7 +195,7 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
             map_generator = MapPool(fixed_maps)
 
         env = TreasureHunt(num_envs=args.n_envs, num_agents=args.n_agents, height=args.height, width=args.width,
-                           observation_fn=observation_fn, colour_mode=args.colour_mode,
+                           observation_fn=observation_fn, colour_mode=args.colour_mode, treasure_refresh_rate=args.treasure_refresh,
                            map_generator=map_generator, device=device, render_args=render_args, strict=args.strict)
 
     elif args.env == 'asymmetric':
@@ -235,8 +237,9 @@ def get_models(args: argparse.Namespace, num_actions: int, device: str) -> List[
         # Create model class
         if args.agent_type in ('lstm', 'gru'):
             models.append(
-                agents.RecurrentAgent(recurrent_module=args.agent_type, num_actions=num_actions, in_channels=INPUT_CHANNELS,
-                                      channels=16, fc_size=32, hidden_size=32).to(device=device, dtype=args.dtype)
+                agents.RecurrentAgent(recurrent_module=args.agent_type, num_actions=num_actions,
+                                      in_channels=INPUT_CHANNELS, channels=16, fc_size=32, hidden_size=32,
+                                      batch_norm=args.batch_norm).to(device=device, dtype=args.dtype)
             )
         elif args.agent_type == 'random':
             models.append(agents.RandomAgent(num_actions=num_actions, device=device))
