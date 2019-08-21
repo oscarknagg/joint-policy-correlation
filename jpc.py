@@ -38,8 +38,8 @@ def worker(i, j):
     for model_path in model_locations:
         models.append(
             agents.RecurrentAgent(recurrent_module=args.agent_type, num_actions=env.num_actions,
-                                  in_channels=INPUT_CHANNELS, channels=16, fc_size=32, hidden_size=32
-                                  ).to(device=args.device, dtype=args.dtype)
+                                  in_channels=INPUT_CHANNELS, channels=16, fc_size=32, hidden_size=32,
+                                  batch_norm=experiment_args.batch_norm).to(device=args.device, dtype=args.dtype)
         )
         models[-1].load_state_dict(torch.load(model_path, map_location=args.device))
 
