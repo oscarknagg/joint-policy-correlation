@@ -70,7 +70,9 @@ class MultiagentVecEnv(ABC):
         self.errors = torch.zeros(self.num_envs, dtype=torch.uint8, device=device, requires_grad=False)
 
     @abstractmethod
-    def step(self, actions: Dict[str, torch.Tensor]) -> (Dict[str, torch.Tensor], Dict[str, torch.Tensor], Dict[str, torch.Tensor], dict):
+    def step(self,
+             actions: Dict[str, torch.Tensor],
+             return_observations: bool = False) -> (Dict[str, torch.Tensor], Dict[str, torch.Tensor], Dict[str, torch.Tensor], dict):
         raise NotImplementedError
 
     @abstractmethod
@@ -238,8 +240,12 @@ class MultiAgentRun(object):
             # TODO: Alert trajectory storage logic to make this cleaner
             _old_observations = {k: v.clone() for k, v in observations.items()}
 
-            observations, reward, done, info = self.env.step(interaction.actions)
-            self.env.reset(done['__all__'], return_observations=False)
+            # We calculate observations after resetting any done agents. As the current
+            # vectorised implementation has to calculate all observations at once (this is
+            # one of the most expensive procedures) this avoids calculating observations
+            # twice for done agents
+            _, reward, done, info = self.env.step(interaction.actions, return_observations=False)
+            observations = self.env.reset(done['__all__'], return_observations=True)
             self.env.check_consistency()
 
             num_episodes += done['__all__'].sum().item()

@@ -347,7 +347,8 @@ class Slither(MultiagentVecEnv):
     def _to_per_agent_dict(self, tensor: torch.Tensor, key: str):
         return {f'{key}_{i}': d for i, d in enumerate(tensor.clone().view(self.num_envs, self.num_agents).t().unbind())}
 
-    def step(self, actions: Dict[str, torch.Tensor]) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor], Dict[str, torch.Tensor], dict]:
+    def step(self, actions: Dict[str, torch.Tensor],
+             return_observations: bool = False) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor], Dict[str, torch.Tensor], dict]:
         check_multi_vec_env_actions(actions, self.num_envs, self.num_agents)
 
         # Clear info
@@ -574,7 +575,10 @@ class Slither(MultiagentVecEnv):
 
         # Get observations
         t0 = time()
-        observations = self._observe()
+        if return_observations:
+            observations = self._observe()
+        else:
+            observations = {}
         self._log(f'Observations: {1000 * (time() - t0)}ms')
 
         dones = {f'agent_{i}': d for i, d in enumerate(self.dones.clone().view(self.num_envs, self.num_agents).t().unbind())}

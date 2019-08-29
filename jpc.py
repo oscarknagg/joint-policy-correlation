@@ -108,7 +108,7 @@ if __name__ == '__main__':
                     models_to_run.update({
                         (int(model_args['repeat']), int(model_args['species'])): os.path.join(root, f)
                     })
-                elif args.folder_parsing_mode == 'legacy':
+                elif args.folder_parsing_mode == 'modern':
                     # Agent pool mode
                     repeat = int(model_args['repeat'])*experiment_args.n_pool + int(model_args['pool_id'])
                     models_to_run.update({

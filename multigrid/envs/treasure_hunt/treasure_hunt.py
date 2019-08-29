@@ -118,7 +118,8 @@ class TreasureHunt(MultiagentVecEnv):
         self._log(f'Other agents: {1000 * (time() - t0)}ms')
         return other_agents
 
-    def step(self, actions: Dict[str, torch.Tensor]) -> (Dict[str, torch.Tensor], Dict[str, torch.Tensor], Dict[str, torch.Tensor], dict):
+    def step(self, actions: Dict[str, torch.Tensor],
+             return_observations: bool = False) -> (Dict[str, torch.Tensor], Dict[str, torch.Tensor], Dict[str, torch.Tensor], dict):
         check_multi_vec_env_actions(actions, self.num_envs, self.num_agents)
         info = {}
         actions = torch.stack([v for k, v in actions.items()]).t().flatten()
@@ -204,7 +205,11 @@ class TreasureHunt(MultiagentVecEnv):
         self.treasure.clamp_(0, self.treasure_refresh_rate + 1)
 
         self.env_lifetimes += 1
-        observations = self._observe()
+        if return_observations:
+            observations = self._observe()
+        else:
+            observations = {}
+
         dones = {f'agent_{i}': d for i, d in
                  enumerate(self.dones.clone().view(self.num_envs, self.num_agents).t().unbind())}
         # # Environment is done if its past the maximum episode length

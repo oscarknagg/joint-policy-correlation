@@ -7,15 +7,9 @@ import os
 import torch
 from torch import multiprocessing
 
-import multigrid.core
-from multigrid import callbacks
-from multigrid import core
 from multigrid import arguments
-from multigrid import utils
 from multigrid import resume
 from multigrid import observations
-from multigrid.callbacks import loggers
-from multigrid.interaction import MultiSpeciesHandler
 from multigrid.pool import MultiAgentPoolRun
 from config import PATH
 
