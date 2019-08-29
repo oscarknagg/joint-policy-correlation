@@ -43,10 +43,10 @@ def worker(i, j):
         )
         models[-1].load_state_dict(torch.load(model_path, map_location=args.device))
 
-    interaction_handler = MultiSpeciesHandler(models, experiment_args.n_species, experiment_args.n_agents, experiment_args.agent_type, keep_obs=False)
+    interaction_handler = MultiSpeciesHandler(models, experiment_args.n_agents, keep_obs=False)
     print(f'{PATH}/experiments/{args.experiment_folder}/jpc/{i}-{j}.csv')
     callbacks = [
-        loggers.LogEnricher(env),
+        loggers.LoggingHandler(env),
         loggers.CSVLogger(
             filename=f'{PATH}/experiments/{args.experiment_folder}/jpc/{args.model_checkpoint_steps}/{i}-{j}.csv',
         ),
@@ -66,6 +66,7 @@ def worker(i, j):
         interaction_handler=interaction_handler,
         callbacks=callback_list,
         trainers=None,
+        mask_agent_dones=experiment_args.mask_dones,
         total_episodes=experiment_args.n_envs,
     )
     environment_run.run()
@@ -75,6 +76,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--experiment-folder', type=str)
     parser.add_argument('--model-checkpoint-steps', type=float)
+    parser.add_argument('--folder-parsing-mode', type=str, default='modern')
     parser = arguments.add_common_arguments(parser)
     parser = arguments.add_training_arguments(parser)
     parser = arguments.add_model_arguments(parser)
@@ -101,9 +103,19 @@ if __name__ == '__main__':
         for f in files:
             model_args = {i.split('=')[0]: i.split('=')[1] for i in f[:-3].split('__')}
             if float(model_args['steps']) == args.model_checkpoint_steps:
-                models_to_run.update({
-                    (int(model_args['repeat']), int(model_args['species'])): os.path.join(root, f)
-                })
+                # Legacy mode
+                if args.folder_parsing_mode == 'legacy':
+                    models_to_run.update({
+                        (int(model_args['repeat']), int(model_args['species'])): os.path.join(root, f)
+                    })
+                elif args.folder_parsing_mode == 'legacy':
+                    # Agent pool mode
+                    repeat = int(model_args['repeat'])*experiment_args.n_pool + int(model_args['pool_id'])
+                    models_to_run.update({
+                        (repeat, int(model_args['agent'])): os.path.join(root, f)
+                    })
+                else:
+                    raise ValueError('Folder parsing mode must be one of {legacy, modern}')
 
     n_repeats = max({k[0] for k in models_to_run.keys()}) + 1
     n_species = max({k[1] for k in models_to_run.keys()}) + 1

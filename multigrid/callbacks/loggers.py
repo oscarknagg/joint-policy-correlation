@@ -2,7 +2,7 @@ import csv
 import io
 import os
 from collections import OrderedDict
-from typing import Iterable, Optional, Dict
+from typing import Iterable, Optional, Dict, List, Union
 import numpy as np
 import torch
 from torch.distributions import Distribution
@@ -141,7 +141,7 @@ class CSVLogger(Callback):
 
 
 class PrintLogger(Callback):
-    def __init__(self, ewm_alpha: Optional[float] = 0.025, env: Optional[str] = None, interval: int = 1000):
+    def __init__(self, env: MultiagentVecEnv, ewm_alpha: Optional[float] = 0.025, interval: int = 1000):
         super(PrintLogger, self).__init__()
         self.ewm_alpha = ewm_alpha
         self.env = env
@@ -170,17 +170,21 @@ class PrintLogger(Callback):
             log_string += 'Done: {:.2e}\t'.format(self.ewm_tracker['done_0'])
             log_string += 'Reward: {:.2e}\t'.format(self.ewm_tracker['reward_0'])
 
-            if self.env == 'snake':
+            if isinstance(self.env, envs.Slither):
                 log_string += 'Edge: {:.2e}\t'.format(self.ewm_tracker['edge_collisions_0'])
                 log_string += 'Food: {:.2e}\t'.format(self.ewm_tracker['food_0'])
                 log_string += 'Collision: {:.2e}\t'.format(self.ewm_tracker['snake_collisions_0'])
                 log_string += 'Size: {:.3}\t'.format(self.ewm_tracker['size_0'])
                 log_string += 'Boost: {:.2e}\t'.format(self.ewm_tracker['boost_0'])
 
-            if self.env == 'laser':
+            if isinstance(self.env, envs.LaserTag):
                 log_string += 'HP: {:.2e}\t'.format(self.ewm_tracker['hp_0'])
                 log_string += 'Laser: {:.2e}\t'.format(self.ewm_tracker['laser_0'])
                 log_string += 'Hit rate: {:.2e}\t'.format(self.ewm_tracker['hit_rate_0'])
+
+            if isinstance(self.env, envs.TreasureHunt):
+                log_string += 'Dig rate: {:.2e}\t'.format(self.ewm_tracker['dig_rate_0'])
+                log_string += 'Find rate: {:.2e}\t'.format(self.ewm_tracker['successful_dig_rate_0'])
 
             log_string += 'FPS: {:.2e}\t'.format(self.ewm_tracker['fps'])
 
@@ -189,17 +193,24 @@ class PrintLogger(Callback):
         self.i += 1
 
 
-class LogEnricher(Callback):
-    """Processes the logs immediately after a step/"""
-    def __init__(self, env: MultiagentVecEnv, initial_steps: int = 0, initial_episodes: int = 0):
-        super(LogEnricher, self).__init__()
+class LoggingHandler(Callback):
+    """Processes the logs immediately after a step."""
+    def __init__(self, env: MultiagentVecEnv,
+                 agent_ids: List[int] = None,
+                 agent_steps: List[int] = None,
+                 agent_episodes: List[int] = None,
+                 initial_time: Union[float, int] = None,
+                 initial_total_steps: int = 0,
+                 initial_total_episodes: int = 0):
+        super(LoggingHandler, self).__init__()
+        self.agent_ids = [np.nan for i in range(env.num_agents)] if agent_ids is None else agent_ids
+        self.agent_steps = [np.nan for i in range(env.num_agents)] if agent_steps is None else agent_steps
+        self.agent_episodes = [np.nan for i in range(env.num_agents)] if agent_episodes is None else agent_episodes
         self.env = env
+        self.t_train_begin = time() if initial_time is None else initial_time
 
-        self.num_episodes = initial_episodes
-        self.num_steps = initial_steps
-
-    def on_train_begin(self):
-        self.t_train_begin = time()
+        self.num_episodes = initial_total_episodes
+        self.num_steps = initial_total_steps
 
     def before_step(self, logs: Optional[dict] = None,
                     actions: Optional[Dict[str, torch.Tensor]] = None,
@@ -215,8 +226,11 @@ class LogEnricher(Callback):
                    rewards: Optional[Dict[str, torch.Tensor]] = None,
                    dones: Optional[Dict[str, torch.Tensor]] = None,
                    infos: Optional[Dict[str, torch.Tensor]] = None):
-        self.num_episodes += dones['__all__'].sum().item()
+        n_finished_eps = dones['__all__'].sum().item()
+        self.num_episodes += n_finished_eps
+        self.agent_episodes = [i + n_finished_eps for i in self.agent_episodes]
         self.num_steps += self.env.num_envs
+        self.agent_steps = [i + self.env.num_envs for i in self.agent_steps]
 
         logs.update({
             't': time() - self.t_train_begin,
@@ -229,6 +243,10 @@ class LogEnricher(Callback):
             logs.update({
                 f'reward_{i}': rewards[f'agent_{i}'].mean().item(),
                 f'done_{i}': dones[f'agent_{i}'].float().mean().item(),
+                # Pool training stuff
+                f'agent_id_{i}': self.agent_ids[i],
+                f'agent_steps_{i}': self.agent_steps[i],
+                f'agent_episodes_{i}': self.agent_episodes[i]
             })
 
             if isinstance(self.env, envs.Slither):

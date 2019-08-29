@@ -187,6 +187,8 @@ class MultiAgentRun(object):
                  interaction_handler: InteractionHandler,
                  callbacks: CallbackList,
                  trainers: Optional[MultiAgentTrainer],
+                 mask_agent_dones: bool = False,
+                 mask_env_dones: bool = False,
                  warm_start: int = 0,
                  initial_steps: int = 0,
                  initial_episodes: int = 0,
@@ -197,6 +199,8 @@ class MultiAgentRun(object):
         self.interaction_handler = interaction_handler
         self.callbacks = callbacks
         self.rl_trainer = trainers
+        self.mask_agent_dones = mask_agent_dones
+        self.mask_env_dones = mask_env_dones
         self.train = trainers is not None
         self.warm_start = warm_start
         self.initial_steps = initial_steps
@@ -237,15 +241,19 @@ class MultiAgentRun(object):
             observations, reward, done, info = self.env.step(interaction.actions)
             self.env.reset(done['__all__'], return_observations=False)
             self.env.check_consistency()
+
             num_episodes += done['__all__'].sum().item()
             num_steps += self.env.num_envs
+            for model in self.models:
+                model.train_steps += self.env.num_envs
+                model.train_episodes += done['__all__'].sum().item()
 
             with torch.no_grad():
                 # Reset hidden states on death or on environment reset
                 for _agent, _done in done.items():
                     if _agent != '__all__':
-                        hidden_states[_agent][done['__all__'] | _done] = 0
-                        cell_states[_agent][done['__all__'] | _done] = 0
+                        hidden_states[_agent][(done['__all__'] & ~self.mask_env_dones) | (_done & ~self.mask_agent_dones)] = 0
+                        cell_states[_agent][(done['__all__'] & ~self.mask_env_dones) | (_done & ~self.mask_agent_dones)] = 0
 
             if not self.train:
                 hidden_states = {k: v.detach() for k, v in hidden_states.items()}
@@ -264,7 +272,7 @@ class MultiAgentRun(object):
 
             final_logs.append(logs)
 
-            if num_steps > self.total_steps or num_episodes >= self.total_episodes:
+            if num_steps >= self.total_steps or num_episodes >= self.total_episodes:
                 break
 
         self.callbacks.on_train_end()

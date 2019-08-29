@@ -3,8 +3,10 @@ from torch import nn
 from typing import Optional
 import torch.nn.functional as F
 
+from .core import RLAgent
 
-class RecurrentAgent(nn.Module):
+
+class RecurrentAgent(nn.Module, RLAgent):
     """Laser tag agent from https://arxiv.org/pdf/1711.00832.pdf.
 
     A few differences:

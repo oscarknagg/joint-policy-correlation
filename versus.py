@@ -55,7 +55,7 @@ def worker(i, j):
                                               experiment_args.agent_type, keep_obs=False)
 
     callbacks = [
-        loggers.LogEnricher(env),
+        loggers.LoggingHandler(env),
         loggers.CSVLogger(
             filename=log_path,
         ),
