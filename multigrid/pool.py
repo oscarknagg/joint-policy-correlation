@@ -4,6 +4,7 @@ from typing import Optional, List, Dict
 from itertools import product
 from time import time
 import math
+import argparse
 
 from multigrid.core import MultiAgentRun, MultiagentVecEnv, MultiAgentTrainer, InteractionHandler, CallbackList
 from multigrid.interaction import AgentPoolHandler, MultiSpeciesHandler
@@ -23,9 +24,10 @@ class MultiAgentPoolRun(object):
                  initial_steps: int = 0,
                  initial_episodes: int = 0,
                  schedule_steps: int = 1000,
+                 repeat_number: int = 0,
                  total_steps: Optional[int] = None,
                  total_episodes: Optional[int] = None,
-                 args = None):
+                 args: argparse.Namespace = None):
         self.env = env
         self.n_pool = n_pool
         self.models = models
@@ -35,6 +37,7 @@ class MultiAgentPoolRun(object):
         self.initial_steps = initial_steps
         self.initial_episodes = initial_episodes
         self.schedule_steps = schedule_steps
+        self.repeat_number = repeat_number
         self.total_steps = total_steps if total_steps else float('inf')
         self.total_episodes = total_episodes if total_episodes else float('inf')
         self.args = args
@@ -61,16 +64,6 @@ class MultiAgentPoolRun(object):
         # self.schedule = self.schedule[torch.randperm(self.schedule.size(0))]
         # self.schedule = self.schedule.repeat(n, 1)[:n*self.n_pool]
 
-        # print('='*20)
-        # print('__init__')
-        # print('='*20)
-        # print('models')
-        # print(self.models)
-        #
-        # print('\ntrainers')
-        # print(self.trainers)
-        # print('-'*20)
-
     def run(self):
         train_begin_time = time()
         total_steps_per_agent = {
@@ -96,16 +89,8 @@ class MultiAgentPoolRun(object):
             rl_trainer = IndependentTrainer(model_trainers)
             interaction_handler = MultiSpeciesHandler(list(models_to_train.values()), n_agents=self.env.num_agents, keep_obs=True)
 
-            save_file = 'repeat=0'
-            repeat = 0
+            save_file = f'repeat={self.repeat_number}'
             model_save_format_string = 'steps={model_steps:.2e}__agent={i_agent}__pool_id={pool_id}.pt'
-
-            # print('models')
-            # print(models_to_train)
-            # print('\ntrainers')
-            # print(model_trainers)
-            # print('-' * 20)
-            # exit()
 
             callback_list = [
                 loggers.LoggingHandler(
@@ -125,11 +110,11 @@ class MultiAgentPoolRun(object):
                 ) if self.args.print_interval is not None else None,
                 callbacks.ModelCheckpoint(
                     f'{PATH}/experiments/{self.args.save_folder}/models',
-                    f'repeat={repeat}__' + model_save_format_string,
+                    f'repeat={self.repeat_number}__' + model_save_format_string,
                     list(models_to_train.values()),
                     interval=self.args.model_interval,
                     s3_bucket=self.args.s3_bucket,
-                    s3_filepath=f'{self.args.save_folder}/models/repeat={repeat}__' + model_save_format_string
+                    s3_filepath=f'{self.args.save_folder}/models/repeat={self.repeat_number}__' + model_save_format_string
                 ) if self.args.save_model else None,
                 loggers.CSVLogger(
                     filename=f'{PATH}/experiments/{self.args.save_folder}/logs/{save_file}.csv',

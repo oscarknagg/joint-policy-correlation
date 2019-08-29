@@ -196,18 +196,18 @@ class PrintLogger(Callback):
 class LoggingHandler(Callback):
     """Processes the logs immediately after a step."""
     def __init__(self, env: MultiagentVecEnv,
-                 agent_ids: List[int],
-                 agent_steps: List[int],
-                 agent_episodes: List[int],
-                 initial_time: Union[float, int],
+                 agent_ids: List[int] = None,
+                 agent_steps: List[int] = None,
+                 agent_episodes: List[int] = None,
+                 initial_time: Union[float, int] = None,
                  initial_total_steps: int = 0,
                  initial_total_episodes: int = 0):
         super(LoggingHandler, self).__init__()
-        self.agent_ids = agent_ids
-        self.agent_steps = agent_steps
-        self.agent_episodes = agent_episodes
+        self.agent_ids = [np.nan for i in range(env.num_agents)] if agent_ids is None else agent_ids
+        self.agent_steps = [np.nan for i in range(env.num_agents)] if agent_steps is None else agent_steps
+        self.agent_episodes = [np.nan for i in range(env.num_agents)] if agent_episodes is None else agent_episodes
         self.env = env
-        self.t_train_begin = initial_time
+        self.t_train_begin = time() if initial_time is None else initial_time
 
         self.num_episodes = initial_total_episodes
         self.num_steps = initial_total_steps
