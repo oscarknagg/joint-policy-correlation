@@ -272,7 +272,7 @@ class LoggingHandler(Callback):
 
             if isinstance(self.env, envs.TreasureHunt):
                 num_digs = infos[f'action_7_{i}'].float().sum().item()
-                successful_dig_rate = rewards[f'agent_{i}'].mean().item() / num_digs if num_digs > 0 else 0
+                successful_dig_rate = rewards[f'agent_{i}'].sum().item() / num_digs if num_digs > 0 else 0
                 logs.update({
                     f'dig_rate_{i}': infos[f'action_7_{i}'].float().mean().item(),
                     f'successful_dig_rate_{i}': successful_dig_rate,

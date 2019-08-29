@@ -116,6 +116,7 @@ def add_laser_tag_env_arguments(parser: argparse.ArgumentParser) -> argparse.Arg
 
 def add_treasure_hunt_env_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument('--treasure-file', type=str)
+    parser.add_argument('--treasure-refresh', type=int, default=20)
     return parser
 
 
@@ -196,7 +197,7 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
             map_generator = MapPool(fixed_maps)
 
         env = TreasureHunt(num_envs=args.n_envs, num_agents=args.n_agents, height=args.height, width=args.width,
-                           observation_fn=observation_fn, colour_mode=args.colour_mode,
+                           observation_fn=observation_fn, colour_mode=args.colour_mode, treasure_refresh_rate=args.treasure_refresh,
                            map_generator=map_generator, device=device, render_args=render_args, strict=args.strict)
 
     elif args.env == 'asymmetric':
