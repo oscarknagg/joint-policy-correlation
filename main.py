@@ -60,6 +60,7 @@ def worker(repeat: int, device: str, args: argparse.Namespace):
         n_pool=args.n_pool,
         models=models,
         trainers=trainers,
+        mask_dones=args.mask_dones,
         warm_start=args.warm_start,
         repeat_number=repeat,
         schedule_steps=args.pool_steps,

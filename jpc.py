@@ -66,6 +66,7 @@ def worker(i, j):
         interaction_handler=interaction_handler,
         callbacks=callback_list,
         trainers=None,
+        mask_agent_dones=experiment_args.mask_dones,
         total_episodes=experiment_args.n_envs,
     )
     environment_run.run()

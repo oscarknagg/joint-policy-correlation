@@ -20,6 +20,7 @@ class MultiAgentPoolRun(object):
                  n_pool: int,
                  models: Dict[str, List[nn.Module]],
                  trainers: Optional[MultiAgentTrainer],
+                 mask_dones: bool = False,
                  warm_start: int = 0,
                  initial_steps: int = 0,
                  initial_episodes: int = 0,
@@ -33,6 +34,8 @@ class MultiAgentPoolRun(object):
         self.models = models
         self.trainers = trainers
         self.train = trainers is not None
+
+        self.mask_dones = mask_dones
         self.warm_start = warm_start
         self.initial_steps = initial_steps
         self.initial_episodes = initial_episodes
@@ -53,16 +56,6 @@ class MultiAgentPoolRun(object):
             self.schedule.append(schedule)
 
         self.schedule = torch.stack(self.schedule).t()
-
-        # # Iterate through in fixed order
-        # self.schedule = []
-        # pools = [range(self.n_pool) for _ in range(self.env.num_agents)]
-        # for i, j in product(*pools):
-        #     self.schedule.append((i, j))
-        #
-        # self.schedule = torch.tensor(self.schedule)
-        # self.schedule = self.schedule[torch.randperm(self.schedule.size(0))]
-        # self.schedule = self.schedule.repeat(n, 1)[:n*self.n_pool]
 
     def run(self):
         train_begin_time = time()
@@ -137,6 +130,7 @@ class MultiAgentPoolRun(object):
                 interaction_handler=interaction_handler,
                 callbacks=callback_list,
                 trainers=rl_trainer,
+                mask_agent_dones=self.mask_dones,
                 warm_start=0,
                 initial_steps=total_steps,
                 total_steps=total_steps + self.schedule_steps * self.env.num_envs,
