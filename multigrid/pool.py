@@ -46,7 +46,6 @@ class MultiAgentPoolRun(object):
         self.args = args
 
         n = math.ceil(self.total_steps / (schedule_steps * self.env.num_envs))
-        print('n ', n)
 
         # Random schedule
         self.schedule = []

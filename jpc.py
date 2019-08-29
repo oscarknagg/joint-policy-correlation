@@ -76,7 +76,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--experiment-folder', type=str)
     parser.add_argument('--model-checkpoint-steps', type=float)
-    parser.add_argument('--folder-parsing-mode', type=str, default='legacy')
+    parser.add_argument('--folder-parsing-mode', type=str, default='modern')
     parser = arguments.add_common_arguments(parser)
     parser = arguments.add_training_arguments(parser)
     parser = arguments.add_model_arguments(parser)
