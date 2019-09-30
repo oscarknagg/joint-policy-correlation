@@ -24,12 +24,12 @@ class S3Backup(Callback):
         self.interval = interval
         self.s3 = boto3.client('s3')
 
-    def after_step(self,
-                   logs: Optional[dict],
-                   obs: Optional[Dict[str, torch.Tensor]] = None,
-                   rewards: Optional[Dict[str, torch.Tensor]] = None,
-                   dones: Optional[Dict[str, torch.Tensor]] = None,
-                   infos: Optional[Dict[str, torch.Tensor]] = None):
+    def after_train(self,
+                    logs: Optional[dict],
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         for local_file, s3_file in self.backup_dict:
             local_file = local_file.format(**logs)
             s3_file = s3_file.format(**logs)

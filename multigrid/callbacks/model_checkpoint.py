@@ -43,12 +43,12 @@ class ModelCheckpoint(Callback):
         self.last_saved_steps = 0
         self.num_checkpoints = 0
 
-    def after_step(self,
-                   logs: Optional[dict],
-                   obs: Optional[Dict[str, torch.Tensor]] = None,
-                   rewards: Optional[Dict[str, torch.Tensor]] = None,
-                   dones: Optional[Dict[str, torch.Tensor]] = None,
-                   infos: Optional[Dict[str, torch.Tensor]] = None):
+    def after_train(self,
+                    logs: Optional[dict],
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         # if (logs['steps'] - self.last_saved_steps) >= self.interval:
         #     self.last_saved_steps = self.num_checkpoints*self.interval
         #     self.num_checkpoints += 1

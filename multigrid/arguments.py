@@ -56,6 +56,7 @@ def add_training_arguments(parser: argparse.ArgumentParser) -> argparse.Argument
     parser.add_argument('--pool-steps', default=1000, type=int)
     parser.add_argument('--value-loss-coeff', default=1.0, type=float)
     parser.add_argument('--entropy', default=0.01, type=float)
+    parser.add_argument('--diversity', default=0.00, type=float)
     parser.add_argument('--max-grad-norm', default=0.5, type=float)
     parser.add_argument('--mask-dones', default=True, type=get_bool, help='Removes deaths from training trajectories.')
     parser.add_argument('--train-algo', default='a2c', type=str)
@@ -318,6 +319,7 @@ def get_trainers(args: argparse.Namespace,
                             value_loss_coeff=args.value_loss_coeff,
                             entropy_loss_coeff=args.entropy,
                             mask_dones=args.mask_dones,
+                            diversity_loss_coeff=args.diversity,
                             # PPO specific arguments
                             batch_size=args.ppo_batch,
                             epochs=args.ppo_epochs,

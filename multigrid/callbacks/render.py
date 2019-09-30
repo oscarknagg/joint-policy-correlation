@@ -12,8 +12,7 @@ class Render(Callback):
         self.env = env
         self.fps = fps
 
-    def before_step(self, logs: Optional[dict] = None,
-                    actions: Optional[Dict[str, torch.Tensor]] = None,
-                    action_distributions: Optional[Dict[str, Distribution]] = None):
+    def before_step(self, logs: Optional[dict] = None, actions: Optional[Dict[str, torch.Tensor]] = None,
+                    action_distributions: Optional[Dict[str, Distribution]] = None, obs=None):
         self.env.render()
         sleep(1. / self.fps)

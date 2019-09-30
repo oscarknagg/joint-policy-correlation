@@ -118,11 +118,11 @@ class CSVLogger(Callback):
         self.writer.writerow(row_dict)
         self.csv_file.flush()
 
-    def after_step(self, logs: Optional[dict] = None,
-                   obs: Optional[Dict[str, torch.Tensor]] = None,
-                   rewards: Optional[Dict[str, torch.Tensor]] = None,
-                   dones: Optional[Dict[str, torch.Tensor]] = None,
-                   infos: Optional[Dict[str, torch.Tensor]] = None):
+    def after_train(self, logs: Optional[dict] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         if self.i % self.interval == 0:
             self._write(logs)
 
@@ -152,11 +152,11 @@ class PrintLogger(Callback):
 
         self.i = 0
 
-    def after_step(self, logs: Optional[dict] = None,
-                   obs: Optional[Dict[str, torch.Tensor]] = None,
-                   rewards: Optional[Dict[str, torch.Tensor]] = None,
-                   dones: Optional[Dict[str, torch.Tensor]] = None,
-                   infos: Optional[Dict[str, torch.Tensor]] = None):
+    def after_train(self, logs: Optional[dict] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         self.ewm_tracker(**logs)
 
         if self.i % self.interval == 0 and self.i > 0:
@@ -212,20 +212,19 @@ class LoggingHandler(Callback):
         self.num_episodes = initial_total_episodes
         self.num_steps = initial_total_steps
 
-    def before_step(self, logs: Optional[dict] = None,
-                    actions: Optional[Dict[str, torch.Tensor]] = None,
-                    action_distributions: Optional[Dict[str, Distribution]] = None):
+    def before_step(self, logs: Optional[dict] = None, actions: Optional[Dict[str, torch.Tensor]] = None,
+                    action_distributions: Optional[Dict[str, Distribution]] = None, obs=None):
         self.t_before_step = time()
         for i in range(self.env.num_agents):
             logs.update({
                 f'policy_entropy_{i}': action_distributions[f'agent_{i}'].entropy().mean().item(),
             })
 
-    def after_step(self, logs: Optional[dict] = None,
-                   obs: Optional[Dict[str, torch.Tensor]] = None,
-                   rewards: Optional[Dict[str, torch.Tensor]] = None,
-                   dones: Optional[Dict[str, torch.Tensor]] = None,
-                   infos: Optional[Dict[str, torch.Tensor]] = None):
+    def after_train(self, logs: Optional[dict] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         n_finished_eps = dones['__all__'].sum().item()
         self.num_episodes += n_finished_eps
         self.agent_episodes = [i + n_finished_eps for i in self.agent_episodes]
@@ -289,16 +288,15 @@ class VideoLogger(Callback):
         os.makedirs(save_folder, exist_ok=True)
         self.recorder = VideoRecorder(env, path=f'{save_folder}/0.mp4')
 
-    def before_step(self, logs: Optional[dict] = None,
-                    actions: Optional[Dict[str, torch.Tensor]] = None,
-                    action_distributions: Optional[Dict[str, Distribution]] = None):
+    def before_step(self, logs: Optional[dict] = None, actions: Optional[Dict[str, torch.Tensor]] = None,
+                    action_distributions: Optional[Dict[str, Distribution]] = None, obs=None):
         self.recorder.capture_frame()
 
-    def after_step(self, logs: Optional[dict] = None,
-                   obs: Optional[Dict[str, torch.Tensor]] = None,
-                   rewards: Optional[Dict[str, torch.Tensor]] = None,
-                   dones: Optional[Dict[str, torch.Tensor]] = None,
-                   infos: Optional[Dict[str, torch.Tensor]] = None):
+    def after_train(self, logs: Optional[dict] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         # If there is just one env save each episode to a different file
         # Otherwise save the whole video at the end
         if self.env.num_envs == 1:
@@ -326,11 +324,11 @@ class HeatMapLogger(Callback):
                                          requires_grad=False)
         self.i = 0
 
-    def after_step(self, logs: Optional[dict] = None,
-                   obs: Optional[Dict[str, torch.Tensor]] = None,
-                   rewards: Optional[Dict[str, torch.Tensor]] = None,
-                   dones: Optional[Dict[str, torch.Tensor]] = None,
-                   infos: Optional[Dict[str, torch.Tensor]] = None):
+    def after_train(self, logs: Optional[dict] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         self.agent_heatmap += self.env.agents\
             .view(self.env.num_envs, self.env.num_envs, self.env.height, self.env.width)\
             .sum(dim=0).clone()

@@ -3,3 +3,4 @@ from .loggers import CSVLogger, PrintLogger, LoggingHandler, HeatMapLogger, Vide
 from .model_checkpoint import ModelCheckpoint
 from .render import Render
 from .s3_backup import S3Backup
+from .diversity import DiversityLoss

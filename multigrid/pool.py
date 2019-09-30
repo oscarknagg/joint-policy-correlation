@@ -118,6 +118,11 @@ class MultiAgentPoolRun(object):
                     s3_filename=f'{self.args.save_folder}/logs/{save_file}.csv',
                     s3_interval=self.args.s3_interval
                 ) if self.args.save_logs else None,
+                callbacks.DiversityLoss(
+                    env=self.env,
+                    models=self.models['agent_0'],
+                    agent='agent_0'
+                ) if self.args.diversity != 0 else None,
             ]
             callback_list = [c for c in callback_list if c]
             callback_list = CallbackList(callback_list)

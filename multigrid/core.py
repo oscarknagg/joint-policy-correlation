@@ -134,9 +134,11 @@ class Callback(object):
     def on_train_begin(self):
         pass
 
-    def before_step(self, logs: Optional[dict] = None,
+    def before_step(self,
+                    logs: Optional[dict] = None,
                     actions: Optional[Dict[str, torch.Tensor]] = None,
-                    action_distributions: Optional[Dict[str, Distribution]] = None):
+                    action_distributions: Optional[Dict[str, Distribution]] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None):
         pass
 
     def after_step(self,
@@ -145,6 +147,14 @@ class Callback(object):
                    rewards: Optional[Dict[str, torch.Tensor]] = None,
                    dones: Optional[Dict[str, torch.Tensor]] = None,
                    infos: Optional[Dict[str, torch.Tensor]] = None):
+        pass
+
+    def after_train(self,
+                    logs: Optional[dict],
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         pass
 
     def on_train_end(self):
@@ -162,20 +172,31 @@ class CallbackList(object):
         for callback in self.callbacks:
             callback.on_train_begin()
 
-    def before_step(self, logs: Optional[dict] = None,
+    def before_step(self,
+                    logs: Optional[dict] = None,
                     actions: Optional[Dict[str, torch.Tensor]] = None,
-                    action_distributions: Optional[Dict[str, Distribution]] = None):
+                    action_distributions: Optional[Dict[str, Distribution]] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None):
         for callback in self.callbacks:
-            callback.before_step(logs, actions, action_distributions)
+            callback.before_step(logs, actions, action_distributions, obs)
 
     def after_step(self,
-                   logs: Optional[dict] = None,
-                   obs: Optional[Dict[str, torch.Tensor]] = None,
-                   rewards: Optional[Dict[str, torch.Tensor]] = None,
-                   dones: Optional[Dict[str, torch.Tensor]] = None,
-                   infos: Optional[Dict[str, torch.Tensor]] = None):
+                    logs: Optional[dict] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         for callback in self.callbacks:
-            callback.after_step(logs, obs, rewards, dones, infos)
+            callback.after_train(logs, obs, rewards, dones, infos)
+
+    def after_train(self,
+                    logs: Optional[dict] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
+        for callback in self.callbacks:
+            callback.after_train(logs, obs, rewards, dones, infos)
 
     def on_train_end(self):
         for callback in self.callbacks:
@@ -228,13 +249,12 @@ class MultiAgentRun(object):
         for i_step in count(1):
             logs = {}
 
-            # This a dirty hack
             # TODO: Alert trajectory storage logic to make this cleaner
             _old_hiddens = {k: v.clone() for k, v in hidden_states.items()}
             _old_cells = {k: v.clone() for k, v in cell_states.items()}
 
             interaction, hidden_states, cell_states = self.interaction_handler.interact(observations, hidden_states, cell_states)
-            self.callbacks.before_step(logs, interaction.actions, interaction.action_distributions)
+            self.callbacks.before_step(logs, interaction.actions, interaction.action_distributions, observations)
 
             # This a dirty hack
             # TODO: Alert trajectory storage logic to make this cleaner
@@ -265,6 +285,8 @@ class MultiAgentRun(object):
                 hidden_states = {k: v.detach() for k, v in hidden_states.items()}
                 cell_states = {k: v.detach() for k, v in cell_states.items()}
 
+            self.callbacks.after_step(logs, observations, reward, done, info)
+
             ##########################
             # Reinforcement learning #
             ##########################
@@ -274,7 +296,7 @@ class MultiAgentRun(object):
                     observations, hidden_states, cell_states
                 )
 
-            self.callbacks.after_step(logs, observations, reward, done, info)
+            self.callbacks.after_train(logs, observations, reward, done, info)
 
             final_logs.append(logs)
 

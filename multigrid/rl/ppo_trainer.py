@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.distributions import Categorical
 from torch.optim.optimizer import Optimizer
+from torch.distributions import kl_divergence
 
 from .core import MultiAgentTrainer, SingleAgentTrainer
 from .a2c_loss import ActorCritic
@@ -26,6 +27,7 @@ class PPOTrainer(SingleAgentTrainer):
                  max_grad_norm: float,
                  value_loss_coeff: float,
                  entropy_loss_coeff: float,
+                 diversity_loss_coeff: float,
                  normalise_advantages: bool = True,
                  mask_dones: bool = False,
                  value_loss_fn: Callable = F.smooth_l1_loss,
@@ -40,6 +42,7 @@ class PPOTrainer(SingleAgentTrainer):
         self.eta_clip = eta_clip
         self.value_loss_coeff = value_loss_coeff
         self.entropy_loss_coeff = entropy_loss_coeff
+        self.diversity_loss_coeff = diversity_loss_coeff
         self.mask_dones = mask_dones
         self.max_grad_norm = max_grad_norm
         self.normalise_advantages = normalise_advantages
@@ -126,7 +129,8 @@ class PPOTrainer(SingleAgentTrainer):
                     self.trajectories.values.detach(),
                     returns,
                     self.trajectories.log_probs,
-                    advantages
+                    advantages,
+                    # shadow_agent_probs
                 )
                 for batch in data_generator:
                     obs_batch, hidden_states_batch, cell_states_batch, actions_batch, values_batch, returns_batch, \
@@ -156,10 +160,17 @@ class PPOTrainer(SingleAgentTrainer):
                     surr2 = torch.clamp(ratio, 1.0 - self.eta_clip, 1.0 + self.eta_clip) * advantages_batch.detach()
                     policy_loss = -torch.min(surr1, surr2).mean()
 
-                    entropy_loss = - new_entropies.mean()
+                    loss = self.value_loss_coeff * value_loss + policy_loss
+
+                    if self.entropy_loss_coeff != 0:
+                        entropy_loss = - new_entropies.mean()
+                        loss += self.entropy_loss_coeff * entropy_loss
+
+                    # if self.diversity_loss_coeff != 0:
+                    #     diversity_loss = kl_divergence(Categorical(action_probabilities), Categorical(pool_agent_probabilities))
+                    #     loss += self.diversity_loss_coeff * diversity_loss
 
                     self.optimizer.zero_grad()
-                    loss = self.value_loss_coeff * value_loss + policy_loss + self.entropy_loss_coeff * entropy_loss
                     loss.backward()
                     nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
                     self.optimizer.step()
