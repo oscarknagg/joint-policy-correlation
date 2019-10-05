@@ -228,7 +228,6 @@ class MultiAgentRun(object):
         for i_step in count(1):
             logs = {}
 
-            # This a dirty hack
             # TODO: Alert trajectory storage logic to make this cleaner
             _old_hiddens = {k: v.clone() for k, v in hidden_states.items()}
             _old_cells = {k: v.clone() for k, v in cell_states.items()}
@@ -236,7 +235,6 @@ class MultiAgentRun(object):
             interaction, hidden_states, cell_states = self.interaction_handler.interact(observations, hidden_states, cell_states)
             self.callbacks.before_step(logs, interaction.actions, interaction.action_distributions)
 
-            # This a dirty hack
             # TODO: Alert trajectory storage logic to make this cleaner
             _old_observations = {k: v.clone() for k, v in observations.items()}
 
