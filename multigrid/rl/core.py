@@ -29,4 +29,3 @@ class IndependentTrainer(MultiAgentTrainer):
     def train(self, *args, **kwargs):
         for tr in self.trainers:
             tr.train(*args, **kwargs)
-

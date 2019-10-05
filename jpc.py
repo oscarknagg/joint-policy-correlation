@@ -68,6 +68,7 @@ def worker(i, j):
         trainers=None,
         mask_agent_dones=experiment_args.mask_dones,
         total_episodes=experiment_args.n_envs,
+        total_steps=experiment_args.n_envs*1000
     )
     environment_run.run()
 

@@ -12,7 +12,8 @@ from multigrid.interaction import Interaction
 
 class A2CTrainer(SingleAgentTrainer):
     def __init__(self,
-                 agent_id: str,
+                 agent_type: str,
+                 pool_id: int,
                  model: nn.Module,
                  update_steps: int,
                  optimizer: Optimizer,
@@ -23,7 +24,8 @@ class A2CTrainer(SingleAgentTrainer):
                  mask_dones: bool = False,
                  value_loss_fn: Callable = F.smooth_l1_loss):
         super(A2CTrainer, self).__init__()
-        self.agent_id = agent_id
+        self.agent_id = agent_type
+        self.pool_id = pool_id
         self.update_steps = update_steps
         self.optimizer = optimizer
         self.model = model

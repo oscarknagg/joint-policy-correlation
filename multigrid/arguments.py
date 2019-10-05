@@ -56,6 +56,7 @@ def add_training_arguments(parser: argparse.ArgumentParser) -> argparse.Argument
     parser.add_argument('--pool-steps', default=1000, type=int)
     parser.add_argument('--value-loss-coeff', default=1.0, type=float)
     parser.add_argument('--entropy', default=0.01, type=float)
+    parser.add_argument('--diversity', default=0.00, type=float)
     parser.add_argument('--max-grad-norm', default=0.5, type=float)
     parser.add_argument('--mask-dones', default=True, type=get_bool, help='Removes deaths from training trajectories.')
     parser.add_argument('--train-algo', default='a2c', type=str)
@@ -292,7 +293,8 @@ def get_trainers(args: argparse.Namespace,
                 if args.train_algo == 'a2c':
                     trainers[agent_type].append(
                         rl.A2CTrainer(
-                            agent_id=f'agent_{i_agent_type}',
+                            agent_type=f'agent_{i_agent_type}',
+                            pool_id=i,
                             model=m,
                             update_steps=args.update_steps,
                             optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=args.weight_decay),
@@ -307,7 +309,8 @@ def get_trainers(args: argparse.Namespace,
                 elif args.train_algo == 'ppo':
                     trainers[agent_type].append(
                         rl.PPOTrainer(
-                            agent_id=f'agent_{i_agent_type}',
+                            agent_type=f'agent_{i_agent_type}',
+                            pool_id=i,
                             model=m,
                             update_steps=args.update_steps,
                             optimizer=optim.Adam(m.parameters(), lr=args.lr, weight_decay=args.weight_decay),

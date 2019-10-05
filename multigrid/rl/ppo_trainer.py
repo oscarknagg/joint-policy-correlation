@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 from torch.distributions import Categorical
 from torch.optim.optimizer import Optimizer
+import os
 
 from .core import MultiAgentTrainer, SingleAgentTrainer
 from .a2c_loss import ActorCritic
@@ -15,7 +16,8 @@ from multigrid import utils
 
 class PPOTrainer(SingleAgentTrainer):
     def __init__(self,
-                 agent_id: str,
+                 agent_type: str,
+                 pool_id: int,
                  model: nn.Module,
                  update_steps: int,
                  optimizer: Optimizer,
@@ -30,7 +32,8 @@ class PPOTrainer(SingleAgentTrainer):
                  mask_dones: bool = False,
                  value_loss_fn: Callable = F.smooth_l1_loss,
                  dtype: torch.dtype = torch.float):
-        self.agent_id = agent_id
+        self.agent_id = agent_type
+        self.pool_id = pool_id
         self.model = model
         self.update_steps = update_steps
         self.a2c = a2c
@@ -51,6 +54,8 @@ class PPOTrainer(SingleAgentTrainer):
         self.j = 0
 
         self.value_loss_clipping = True
+
+        os.makedirs(f'tmp/trajectories/{self.agent_id}/{self.pool_id}/', exist_ok=True)
 
     def __repr__(self):
         return f'PPOTrainer(agent_id={self.agent_id})'
@@ -164,11 +169,14 @@ class PPOTrainer(SingleAgentTrainer):
                     nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
                     self.optimizer.step()
 
+            # Hacking in saving trajectories
+            if self.i > 31250:
+                torch.save(self.trajectories.obs, f'tmp/trajectories/{self.agent_id}/{self.pool_id}/{self.i}.pt')
+
             self.trajectories.clear()
             hidden_states[self.agent_id] = hidden_states[self.agent_id].detach()
             current_hiddens[self.agent_id] = current_hiddens[self.agent_id].detach()
             cell_states[self.agent_id] = cell_states[self.agent_id].detach()
             current_cells[self.agent_id] = current_cells[self.agent_id].detach()
 
-        self.i = (self.i + 1) % self.update_steps
-
+        self.i += 1
