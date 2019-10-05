@@ -139,6 +139,14 @@ class Callback(object):
                     action_distributions: Optional[Dict[str, Distribution]] = None):
         pass
 
+    def after_step(self,
+                   logs: Optional[dict] = None,
+                   obs: Optional[Dict[str, torch.Tensor]] = None,
+                   rewards: Optional[Dict[str, torch.Tensor]] = None,
+                   dones: Optional[Dict[str, torch.Tensor]] = None,
+                   infos: Optional[Dict[str, torch.Tensor]] = None):
+        pass
+
     def after_train(self,
                     logs: Optional[dict],
                     obs: Optional[Dict[str, torch.Tensor]] = None,
@@ -167,6 +175,15 @@ class CallbackList(object):
                     action_distributions: Optional[Dict[str, Distribution]] = None):
         for callback in self.callbacks:
             callback.before_step(logs, actions, action_distributions)
+
+    def after_step(self,
+                    logs: Optional[dict] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
+        for callback in self.callbacks:
+            callback.after_step(logs, obs, rewards, dones, infos)
 
     def after_train(self,
                     logs: Optional[dict] = None,
@@ -251,6 +268,8 @@ class MultiAgentRun(object):
             for model in self.models:
                 model.train_steps += self.env.num_envs
                 model.train_episodes += done['__all__'].sum().item()
+
+            self.callbacks.after_step(logs, observations, reward, done, info)
 
             with torch.no_grad():
                 # Reset hidden states on death or on environment reset
