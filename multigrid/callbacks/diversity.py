@@ -37,12 +37,12 @@ class DiversityReward(Callback):
         # Subtract loss * diversity_coeff from rewards
         pass
 
-    def after_step(self,
-                   logs: Optional[dict],
-                   obs: Optional[Dict[str, torch.Tensor]] = None,
-                   rewards: Optional[Dict[str, torch.Tensor]] = None,
-                   dones: Optional[Dict[str, torch.Tensor]] = None,
-                   infos: Optional[Dict[str, torch.Tensor]] = None):
+    def after_train(self,
+                    logs: Optional[dict],
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         # Save logs to file here
         pass
 

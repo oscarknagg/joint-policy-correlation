@@ -139,12 +139,12 @@ class Callback(object):
                     action_distributions: Optional[Dict[str, Distribution]] = None):
         pass
 
-    def after_step(self,
-                   logs: Optional[dict],
-                   obs: Optional[Dict[str, torch.Tensor]] = None,
-                   rewards: Optional[Dict[str, torch.Tensor]] = None,
-                   dones: Optional[Dict[str, torch.Tensor]] = None,
-                   infos: Optional[Dict[str, torch.Tensor]] = None):
+    def after_train(self,
+                    logs: Optional[dict],
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         pass
 
     def on_train_end(self):
@@ -168,14 +168,14 @@ class CallbackList(object):
         for callback in self.callbacks:
             callback.before_step(logs, actions, action_distributions)
 
-    def after_step(self,
-                   logs: Optional[dict] = None,
-                   obs: Optional[Dict[str, torch.Tensor]] = None,
-                   rewards: Optional[Dict[str, torch.Tensor]] = None,
-                   dones: Optional[Dict[str, torch.Tensor]] = None,
-                   infos: Optional[Dict[str, torch.Tensor]] = None):
+    def after_train(self,
+                    logs: Optional[dict] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         for callback in self.callbacks:
-            callback.after_step(logs, obs, rewards, dones, infos)
+            callback.after_train(logs, obs, rewards, dones, infos)
 
     def on_train_end(self):
         for callback in self.callbacks:
@@ -272,7 +272,7 @@ class MultiAgentRun(object):
                     observations, hidden_states, cell_states
                 )
 
-            self.callbacks.after_step(logs, observations, reward, done, info)
+            self.callbacks.after_train(logs, observations, reward, done, info)
 
             final_logs.append(logs)
 
