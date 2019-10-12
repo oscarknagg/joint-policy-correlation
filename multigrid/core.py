@@ -140,11 +140,19 @@ class Callback(object):
         pass
 
     def after_step(self,
-                   logs: Optional[dict],
+                   logs: Optional[dict] = None,
                    obs: Optional[Dict[str, torch.Tensor]] = None,
                    rewards: Optional[Dict[str, torch.Tensor]] = None,
                    dones: Optional[Dict[str, torch.Tensor]] = None,
                    infos: Optional[Dict[str, torch.Tensor]] = None):
+        pass
+
+    def after_train(self,
+                    logs: Optional[dict],
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         pass
 
     def on_train_end(self):
@@ -169,13 +177,22 @@ class CallbackList(object):
             callback.before_step(logs, actions, action_distributions)
 
     def after_step(self,
-                   logs: Optional[dict] = None,
-                   obs: Optional[Dict[str, torch.Tensor]] = None,
-                   rewards: Optional[Dict[str, torch.Tensor]] = None,
-                   dones: Optional[Dict[str, torch.Tensor]] = None,
-                   infos: Optional[Dict[str, torch.Tensor]] = None):
+                    logs: Optional[dict] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
         for callback in self.callbacks:
             callback.after_step(logs, obs, rewards, dones, infos)
+
+    def after_train(self,
+                    logs: Optional[dict] = None,
+                    obs: Optional[Dict[str, torch.Tensor]] = None,
+                    rewards: Optional[Dict[str, torch.Tensor]] = None,
+                    dones: Optional[Dict[str, torch.Tensor]] = None,
+                    infos: Optional[Dict[str, torch.Tensor]] = None):
+        for callback in self.callbacks:
+            callback.after_train(logs, obs, rewards, dones, infos)
 
     def on_train_end(self):
         for callback in self.callbacks:
@@ -228,7 +245,6 @@ class MultiAgentRun(object):
         for i_step in count(1):
             logs = {}
 
-            # This a dirty hack
             # TODO: Alert trajectory storage logic to make this cleaner
             _old_hiddens = {k: v.clone() for k, v in hidden_states.items()}
             _old_cells = {k: v.clone() for k, v in cell_states.items()}
@@ -236,7 +252,6 @@ class MultiAgentRun(object):
             interaction, hidden_states, cell_states = self.interaction_handler.interact(observations, hidden_states, cell_states)
             self.callbacks.before_step(logs, interaction.actions, interaction.action_distributions)
 
-            # This a dirty hack
             # TODO: Alert trajectory storage logic to make this cleaner
             _old_observations = {k: v.clone() for k, v in observations.items()}
 
@@ -253,6 +268,8 @@ class MultiAgentRun(object):
             for model in self.models:
                 model.train_steps += self.env.num_envs
                 model.train_episodes += done['__all__'].sum().item()
+
+            self.callbacks.after_step(logs, observations, reward, done, info)
 
             with torch.no_grad():
                 # Reset hidden states on death or on environment reset
@@ -274,7 +291,7 @@ class MultiAgentRun(object):
                     observations, hidden_states, cell_states
                 )
 
-            self.callbacks.after_step(logs, observations, reward, done, info)
+            self.callbacks.after_train(logs, observations, reward, done, info)
 
             final_logs.append(logs)
 
