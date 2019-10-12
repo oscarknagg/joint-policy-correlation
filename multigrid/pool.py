@@ -67,6 +67,16 @@ class MultiAgentPoolRun(object):
         total_steps = 0
         total_episodes = 0
 
+        # Define long-lived callbacks
+        diversity_callback = callbacks.DiversityReward(
+            diversity_coeff=self.args.diversity,
+            retrain_interval=1000,
+            window_length=2000,
+            experiment_folder=f'{PATH}/experiments/{self.args.save_folder}',
+            matchup=[],
+            num_pool=self.n_pool
+        ) if self.args.diversity != 0 else None
+
         for i_matchup, matchup in enumerate(self.schedule):
             models_to_train = {
                 f'agent_{i_agent_type}_{int(i_model.item())}': self.models[f'agent_{i_agent_type}'][int(i_model.item())]
@@ -81,6 +91,9 @@ class MultiAgentPoolRun(object):
 
             save_file = f'repeat={self.repeat_number}'
             model_save_format_string = 'steps={model_steps:.2e}__agent={i_agent}__pool_id={pool_id}.pt'
+
+            if self.args.diversity != 0:
+                diversity_callback.matchup = list(matchup)
 
             callback_list = [
                 loggers.LoggingHandler(
@@ -106,14 +119,7 @@ class MultiAgentPoolRun(object):
                     s3_bucket=self.args.s3_bucket,
                     s3_filepath=f'{self.args.save_folder}/models/repeat={self.repeat_number}__' + model_save_format_string
                 ) if self.args.save_model else None,
-                callbacks.DiversityReward(
-                    diversity_coeff=self.args.diversity,
-                    retrain_interval=1000,
-                    window_length=2000,
-                    experiment_folder=f'{PATH}/experiments/{self.args.save_folder}',
-                    matchup=list(matchup),
-                    num_pool=self.n_pool
-                ) if self.args.diversity != 0 else None,
+                diversity_callback,
                 loggers.CSVLogger(
                     filename=f'{PATH}/experiments/{self.args.save_folder}/logs/{save_file}.csv',
                     header_comment=utils.get_comment(self.args),
