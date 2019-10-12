@@ -115,7 +115,11 @@ def plot_matchups(df: pd.DataFrame,
     fig, axes = plt.subplots(n_pool, n_pool, figsize=figsize)
     for i in range(n_pool):
         for j in range(n_pool):
-            ax = axes[i, j]
+            if isinstance(axes, np.ndarray):
+                ax = axes[i, j]
+            else:
+                ax = axes
+
             df_plot = df[(df[f'agent_id_0'] == i) & (df[f'agent_id_1'] == j) & (df['repeat'] == repeat)]
 
             ax.set_title('{}-{} vs {}-{}'.format(0, i, 1, j))

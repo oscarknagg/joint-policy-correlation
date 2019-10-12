@@ -169,10 +169,6 @@ class PPOTrainer(SingleAgentTrainer):
                     nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
                     self.optimizer.step()
 
-            # Hacking in saving trajectories
-            if self.i > 31250:
-                torch.save(self.trajectories.obs, f'tmp/trajectories/{self.agent_id}/{self.pool_id}/{self.i}.pt')
-
             self.trajectories.clear()
             hidden_states[self.agent_id] = hidden_states[self.agent_id].detach()
             current_hiddens[self.agent_id] = current_hiddens[self.agent_id].detach()

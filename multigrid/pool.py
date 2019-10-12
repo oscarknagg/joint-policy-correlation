@@ -68,8 +68,6 @@ class MultiAgentPoolRun(object):
         total_episodes = 0
 
         for i_matchup, matchup in enumerate(self.schedule):
-            print(matchup)
-
             models_to_train = {
                 f'agent_{i_agent_type}_{int(i_model.item())}': self.models[f'agent_{i_agent_type}'][int(i_model.item())]
                 for i_agent_type, i_model in enumerate(matchup)
@@ -108,6 +106,14 @@ class MultiAgentPoolRun(object):
                     s3_bucket=self.args.s3_bucket,
                     s3_filepath=f'{self.args.save_folder}/models/repeat={self.repeat_number}__' + model_save_format_string
                 ) if self.args.save_model else None,
+                callbacks.DiversityReward(
+                    diversity_coeff=self.args.diversity,
+                    retrain_interval=1000,
+                    window_length=2000,
+                    experiment_folder=f'{PATH}/experiments/{self.args.save_folder}',
+                    matchup=list(matchup),
+                    num_pool=self.n_pool
+                ) if self.args.diversity != 0 else None,
                 loggers.CSVLogger(
                     filename=f'{PATH}/experiments/{self.args.save_folder}/logs/{save_file}.csv',
                     header_comment=utils.get_comment(self.args),
@@ -146,5 +152,5 @@ class MultiAgentPoolRun(object):
 
             print('Total steps ', final_logs['steps'])
             print('Total episodes ', final_logs['episodes'])
-            print(total_episodes_per_agent)
-            print(total_steps_per_agent)
+            print('Steps per agent', total_steps_per_agent)
+            print('Episodes per agent', total_episodes_per_agent)
