@@ -239,6 +239,7 @@ class MultiAgentRun(object):
                            range(self.env.num_agents)}
 
         # Interact with environment
+        self.callbacks.on_train_begin()
         num_episodes = self.initial_episodes
         num_steps = self.initial_steps
         final_logs = []

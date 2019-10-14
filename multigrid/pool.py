@@ -69,9 +69,11 @@ class MultiAgentPoolRun(object):
 
         # Define long-lived callbacks
         diversity_callback = callbacks.DiversityReward(
+            models=[],
+            env=self.env,
             diversity_coeff=self.args.diversity,
             retrain_interval=1000,
-            window_length=2000,
+            window_length=2000*self.env.num_envs,
             experiment_folder=f'{PATH}/experiments/{self.args.save_folder}',
             matchup=[],
             num_pool=self.n_pool
@@ -94,6 +96,7 @@ class MultiAgentPoolRun(object):
 
             if self.args.diversity != 0:
                 diversity_callback.matchup = list(matchup)
+                diversity_callback.models = list(models_to_train.values())
 
             callback_list = [
                 loggers.LoggingHandler(
