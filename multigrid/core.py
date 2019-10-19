@@ -177,11 +177,11 @@ class CallbackList(object):
             callback.before_step(logs, actions, action_distributions)
 
     def after_step(self,
-                    logs: Optional[dict] = None,
-                    obs: Optional[Dict[str, torch.Tensor]] = None,
-                    rewards: Optional[Dict[str, torch.Tensor]] = None,
-                    dones: Optional[Dict[str, torch.Tensor]] = None,
-                    infos: Optional[Dict[str, torch.Tensor]] = None):
+                   logs: Optional[dict] = None,
+                   obs: Optional[Dict[str, torch.Tensor]] = None,
+                   rewards: Optional[Dict[str, torch.Tensor]] = None,
+                   dones: Optional[Dict[str, torch.Tensor]] = None,
+                   infos: Optional[Dict[str, torch.Tensor]] = None):
         for callback in self.callbacks:
             callback.after_step(logs, obs, rewards, dones, infos)
 
@@ -239,6 +239,7 @@ class MultiAgentRun(object):
                            range(self.env.num_agents)}
 
         # Interact with environment
+        self.callbacks.on_train_begin()
         num_episodes = self.initial_episodes
         num_steps = self.initial_steps
         final_logs = []
