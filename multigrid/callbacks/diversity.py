@@ -26,7 +26,7 @@ class Discriminator(nn.Module):
         self.conv3 = nn.Conv2d(channels, channels, kernel_size=3, stride=1)
         self.linear = nn.Linear(flattened_size, fc_size)
         self.n_classes = n_classes
-        self.discriminator = nn.Linear(hidden_size, n_classes)
+        self.discriminator = nn.Linear(hidden_size, n_classes, bias=False)
 
         self.bn_conv1 = nn.BatchNorm2d(channels)
         self.bn_conv2 = nn.BatchNorm2d(channels)
@@ -101,8 +101,10 @@ class DiversityReward(Callback):
                  experiment_folder: str,
                  matchup: List[int],
                  num_pool: int,
+                 epochs: int,
                  seq_len: int = 125,  # Convenient number: 1/8th of episode length
-                 cleanup: bool = False):
+                 cleanup: bool = False,
+                 full_retrain: bool = False):
         super(DiversityReward, self).__init__()
         self.models = models
         self.env = env
@@ -114,6 +116,7 @@ class DiversityReward(Callback):
         self.matchup = matchup
         self.seq_len = seq_len
         self.cleanup = cleanup
+        self.full_retrain = full_retrain
         self.i = 0
 
         # Discriminator structure hardcoded as I don't see a need to tune it excessively
@@ -125,7 +128,8 @@ class DiversityReward(Callback):
         # 2 agent types hardcoded
         self.num_agent_types = 2
 
-        self.epochs = 3
+        self.epochs = epochs
+        self.weight_decay = 1e-4
 
         self.discriminators = [
             Discriminator(
@@ -133,9 +137,14 @@ class DiversityReward(Callback):
             ).cuda()
             for _ in range(self.num_agent_types)
         ]
+        self.optimisers = [
+            optim.Adam(d.parameters(), weight_decay=self.weight_decay) for d in self.discriminators
+        ]
         self.trajectories = [TrajectoryStore() for _ in range(self.num_agent_types)]
         self._reset_hidden_states()
 
+        # Remove any old trajectories
+        self._cleanup()
         # Setup directories
         os.makedirs(f'{experiment_folder}/trajectories/', exist_ok=True)
         for agent_type_id in range(self.num_agent_types):
@@ -154,7 +163,7 @@ class DiversityReward(Callback):
 
     def _retrain(self):
         # 2 agent types hardcoded
-        print('Retraining at step {}'.format(self.i))
+        print('Retraining {}at step {}'.format('from scratch ' if self.full_retrain else '', self.i))
         training_logs = {}
         for agent_type_id in range(self.num_agent_types):
             logs = self._fit(agent_type_id)
@@ -169,10 +178,15 @@ class DiversityReward(Callback):
     def _fit(self, agent_type_id: int):
         trajectories = DatasetFolder(
             f'{self.experiment_folder}/trajectories/agent_{agent_type_id}/', extensions=['.pt'], loader=torch.load)
-        discriminator = Discriminator(
-            self.in_channels, self.channels, self.fc_size, self.hidden_size, n_classes=self.num_pool).cuda()
+        if self.full_retrain:
+            discriminator = Discriminator(
+                self.in_channels, self.channels, self.fc_size, self.hidden_size, n_classes=self.num_pool).cuda()
+            optimiser = optim.Adam(discriminator.parameters(), weight_decay=self.weight_decay)
+        else:
+            discriminator = self.discriminators[agent_type_id]
+            optimiser = self.optimisers[agent_type_id]
+
         discriminator.train()
-        optimiser = optim.Adam(discriminator.parameters())
 
         print('Training discriminator for agent_type {} with {} samples'.format(agent_type_id, len(trajectories)))
         training_logs = {}
@@ -211,10 +225,7 @@ class DiversityReward(Callback):
                         removed.append(j)
                         os.remove(os.path.join(root, f))
 
-                    # if j < self.i - self.window_length:
-                    #     os.remove(os.path.join(root, f))
-
-            print('Removed {}'.format(removed))
+                print('Removed {} files'.format(len(removed)))
 
     def _diversity_reward(self, obs, rewards):
         # Run network on observations to get predictions
@@ -231,9 +242,12 @@ class DiversityReward(Callback):
                 self.hidden_states[f'agent_{i}'] = h_new.squeeze(0)
                 diversity_loss = loss_fn(predictions, self.matchup[i], reduction='none')
 
-            rewards_dict.update({f'diversity_reward_{i}': diversity_loss})
+            rewards_dict.update({f'diversity_reward_{i}': self.diversity_coeff * diversity_loss})
 
-        return rewards_dict
+            # Actually modifying rewards
+            rewards[f'agent_{i}'] -= self.diversity_coeff * diversity_loss
+
+        return rewards_dict, rewards
 
     def _save_observations(self, obs):
         for i, (agent, observations) in enumerate(obs.items()):
@@ -247,29 +261,36 @@ class DiversityReward(Callback):
                 # torch.save(trajectories.obs, f'{self.experiment_folder}/trajectories/{agent}/{pool_id}/{self.i}.pt')
                 trajectories.clear()
 
-    def after_train(self,
-                    logs: Optional[dict],
-                    obs: Optional[Dict[str, torch.Tensor]] = None,
-                    rewards: Optional[Dict[str, torch.Tensor]] = None,
-                    dones: Optional[Dict[str, torch.Tensor]] = None,
-                    infos: Optional[Dict[str, torch.Tensor]] = None):
+    def after_step(self,
+                   logs: Optional[dict] = None,
+                   obs: Optional[Dict[str, torch.Tensor]] = None,
+                   rewards: Optional[Dict[str, torch.Tensor]] = None,
+                   dones: Optional[Dict[str, torch.Tensor]] = None,
+                   infos: Optional[Dict[str, torch.Tensor]] = None):
         self.i += 1
         self._save_observations(obs)
 
         if self.i % self.retrain_interval == 0:
+            self._after_retrain()
             retrain_logs = self._retrain()
             logs.update(retrain_logs)
-            self._after_retrain()
         else:
             # Placeholder logs so the CSVLogger will record training losses
             for agent_type_id in range(self.num_agent_types):
                 for i in range(self.epochs):
                     logs.update({f'discrim_train_loss_{agent_type_id}_epoch_{i}': np.nan})
 
-        diversity_rewards = self._diversity_reward(obs, rewards)
+        # Make a copy of the original rewards
+        for i, _ in enumerate(self.discriminators):
+            logs[f'environmental_reward_{i}'] = rewards[f'agent_{i}'].mean().item()
+
+        diversity_rewards, rewards = self._diversity_reward(obs, rewards)
         logs.update({k: v.mean().item() for k, v in diversity_rewards.items()})
 
     def on_train_end(self):
         # Clean up trajectories folder
         if self.cleanup:
-            shutil.rmtree(f'{self.experiment_folder}/trajectories/', ignore_errors=True)
+            self._cleanup()
+
+    def _cleanup(self):
+        shutil.rmtree(f'{self.experiment_folder}/trajectories/', ignore_errors=True)

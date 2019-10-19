@@ -72,11 +72,13 @@ class MultiAgentPoolRun(object):
             models=[],
             env=self.env,
             diversity_coeff=self.args.diversity,
-            retrain_interval=1000,
-            window_length=2000*self.env.num_envs,
+            retrain_interval=self.args.diversity_interval,
+            window_length=self.args.diversity_window*self.env.num_envs,
             experiment_folder=f'{PATH}/experiments/{self.args.save_folder}',
             matchup=[],
-            num_pool=self.n_pool
+            num_pool=self.n_pool,
+            full_retrain=not self.args.diversity_incremental,
+            epochs=self.args.diversity_epochs
         ) if self.args.diversity != 0 else None
 
         for i_matchup, matchup in enumerate(self.schedule):
