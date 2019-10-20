@@ -62,7 +62,7 @@ class Harvest(MultiagentVecEnv):
         self.harvesters_needed = 2
 
         self.grass_colour = [88, 130, 39]
-        self.plant_colour = [0, 95, 31]
+        self.plant_colour = [0, 63, 15]
         if colour_mode == 'random':
             self.agent_colours = self._get_n_colours(num_envs*num_agents)
         elif colour_mode == 'fixed':
