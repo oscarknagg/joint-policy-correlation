@@ -182,9 +182,9 @@ class PrintLogger(Callback):
                 log_string += 'Laser: {:.2e}\t'.format(self.ewm_tracker['laser_0'])
                 log_string += 'Hit rate: {:.2e}\t'.format(self.ewm_tracker['hit_rate_0'])
 
-            if isinstance(self.env, envs.TreasureHunt):
-                log_string += 'Dig rate: {:.2e}\t'.format(self.ewm_tracker['dig_rate_0'])
-                log_string += 'Find rate: {:.2e}\t'.format(self.ewm_tracker['successful_dig_rate_0'])
+            if isinstance(self.env, envs.Harvest):
+                log_string += 'Harvest rate: {:.2e}\t'.format(self.ewm_tracker['harvest_rate_0'])
+                log_string += 'Find rate: {:.2e}\t'.format(self.ewm_tracker['successful_harvest_rate_0'])
 
             log_string += 'FPS: {:.2e}\t'.format(self.ewm_tracker['fps'])
 
@@ -270,12 +270,12 @@ class LoggingHandler(Callback):
                     f'errors': self.env.errors.sum().item()
                 })
 
-            if isinstance(self.env, envs.TreasureHunt):
-                num_digs = infos[f'action_7_{i}'].float().sum().item()
-                successful_dig_rate = rewards[f'agent_{i}'].sum().item() / num_digs if num_digs > 0 else 0
+            if isinstance(self.env, envs.Harvest):
+                num_harvests = infos[f'action_7_{i}'].float().sum().item()
+                successful_harvest_rate = rewards[f'agent_{i}'].sum().item() / num_harvests if num_harvests > 0 else 0
                 logs.update({
-                    f'dig_rate_{i}': infos[f'action_7_{i}'].float().mean().item(),
-                    f'successful_dig_rate_{i}': successful_dig_rate,
+                    f'harvest_rate_{i}': infos[f'action_7_{i}'].float().mean().item(),
+                    f'successful_harvest_rate_{i}': successful_harvest_rate,
                     f'errors': self.env.errors.sum().item()
                 })
 
