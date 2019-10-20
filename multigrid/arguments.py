@@ -158,7 +158,11 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
         'num_rows': args.render_rows,
         'num_cols': args.render_cols,
     }
+    # Pre-process map name (kind of a hack to help identify which "small2" map we're
+    # referring to in the arguments)
+    args.env_map = [f'{args.env}-{m}' for m in args.env_map]
     if args.env == 'snake':
+        args.env_map = [f'snake-{m}' for m in args.env_map]
         env = Slither(num_envs=args.n_envs, num_agents=args.n_agents, food_on_death_prob=args.food_on_death,
                       height=args.height, width=args.width, device=device, render_args=render_args,
                       boost=args.boost,
