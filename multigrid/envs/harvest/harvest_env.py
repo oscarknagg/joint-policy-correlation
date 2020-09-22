@@ -13,7 +13,7 @@ from multigrid.observations import ObservationFunction, RenderObservations
 from config import DEFAULT_DEVICE, EPS
 
 
-class TreasureHunt(MultiagentVecEnv):
+class Harvest(MultiagentVecEnv):
     """Co-operative environment."""
     no_op = 0
     rotate_right = 1
@@ -22,7 +22,7 @@ class TreasureHunt(MultiagentVecEnv):
     move_back = 4
     move_right = 5
     move_left = 6
-    dig = 7
+    harvest = 7
     move_forward_and_turn_right = 8
     move_forward_and_turn_left = 9
 
@@ -45,10 +45,10 @@ class TreasureHunt(MultiagentVecEnv):
                  initial_hp: int = 2,
                  render_args: dict = None,
                  env_lifetime: int = 1000,
-                 treasure_refresh_rate: int = 20,
+                 refresh_rate: int = 20,
                  dtype: torch.dtype = torch.float,
                  device: str = DEFAULT_DEVICE):
-        super(TreasureHunt, self).__init__(num_envs, num_agents, height, width, dtype, device)
+        super(Harvest, self).__init__(num_envs, num_agents, height, width, dtype, device)
         self.strict = strict
         self.verbose = verbose
         self.map_generator = map_generator
@@ -56,11 +56,13 @@ class TreasureHunt(MultiagentVecEnv):
         self.observation_fn = observation_fn
         self.initial_hp = initial_hp
         self.max_env_lifetime = env_lifetime
-        self.treasure_refresh_rate = treasure_refresh_rate + 1
+        self.refresh_rate = refresh_rate + 1
         self.num_actions = 10
-        self.dig_radius = 1
-        self.diggers_needed = 2
+        self.harvest_radius = 1
+        self.harvesters_needed = 2
 
+        self.grass_colour = [88, 130, 39]
+        self.plant_colour = [0, 63, 15]
         if colour_mode == 'random':
             self.agent_colours = self._get_n_colours(num_envs*num_agents)
         elif colour_mode == 'fixed':
@@ -81,10 +83,10 @@ class TreasureHunt(MultiagentVecEnv):
         # Environment tensors
         self.env_lifetimes = torch.zeros((num_envs), dtype=torch.long, device=self.device, requires_grad=False)
 
-        self.has_dug = torch.zeros(self.num_envs * self.num_agents, dtype=torch.uint8, device=self.device)
+        self.has_harvested = torch.zeros(self.num_envs * self.num_agents, dtype=torch.uint8, device=self.device)
         if not manual_setup:
             self.agents, self.orientations, self.dones, self.hp, self.pathing, self.respawns, \
-                self.treasure = self._create_envs(num_envs)
+                self.plants = self._create_envs(num_envs)
         else:
             self.agents = torch.zeros((num_envs*num_agents, 1, height, width), device=device, requires_grad=False)
             self.orientations = torch.zeros((num_envs * num_agents), dtype=torch.long, device=self.device, requires_grad=False)
@@ -92,7 +94,7 @@ class TreasureHunt(MultiagentVecEnv):
             self.hp = torch.ones((num_envs * num_agents), dtype=torch.long, device=device, requires_grad=False) * self.initial_hp
             self.pathing = torch.zeros((num_envs, 1, height, width), device=device, requires_grad=False, dtype=torch.uint8)
             self.respawns = torch.zeros((num_envs, 1, height, width), device=device, requires_grad=False, dtype=torch.uint8)
-            self.treasure = torch.zeros((num_envs, 1, height, width), device=device, requires_grad=False, dtype=torch.uint8)
+            self.plants = torch.zeros((num_envs, 1, height, width), device=device, requires_grad=False, dtype=torch.uint8)
 
         # Environment outputs
         self.rewards = torch.zeros(self.num_envs * self.num_agents, dtype=torch.float, device=self.device)
@@ -169,7 +171,7 @@ class TreasureHunt(MultiagentVecEnv):
                 t0 = time()
                 overlap = self.agents.gt(0.5) & (self._other_agents() |
                                                  self.pathing.repeat_interleave(self.num_agents, 0) |
-                                                 self.treasure.gt(self.treasure_refresh_rate+0.5).repeat_interleave(self.num_agents, 0))
+                                                 self.plants.gt(self.refresh_rate + 0.5).repeat_interleave(self.num_agents, 0))
                 reset_due_to_pathing = overlap.view(self.num_envs * self.num_agents, -1).any(dim=1)
                 if torch.any(reset_due_to_pathing):
                     self.agents[reset_due_to_pathing & currently_moving] = original_agents[reset_due_to_pathing & currently_moving]
@@ -182,27 +184,27 @@ class TreasureHunt(MultiagentVecEnv):
         self.orientations.fmod_(4)
         self._log(f'Orientations: {1000 * (time() - t0)}ms')
 
-        self.has_dug = actions == self.dig
-        if torch.any(self.has_dug):
-            dig_counts = F.conv2d(
-                self.agents * self.has_dug[:, None, None, None].float(),
-                torch.ones((1, 1, 2 * self.dig_radius + 1, 2 * self.dig_radius + 1), device=self.device),
+        self.has_harvested = actions == self.harvest
+        if torch.any(self.has_harvested):
+            harvest_counts = F.conv2d(
+                self.agents * self.has_harvested[:, None, None, None].float(),
+                torch.ones((1, 1, 2 * self.harvest_radius + 1, 2 * self.harvest_radius + 1), device=self.device),
                 padding=1
             ).view(self.num_envs, self.num_agents, self.height, self.width).sum(dim=1, keepdim=True)
-            dig_zones = dig_counts.gt(self.diggers_needed-0.5)
-            found_treasure = dig_zones & self.treasure.gt(self.treasure_refresh_rate+0.5)
-            # Agents get reward for all treasure found in their env
-            self.rewards += found_treasure\
+            harvest_zones = harvest_counts.gt(self.harvesters_needed - 0.5)
+            harvested_plants = harvest_zones & self.plants.gt(self.refresh_rate + 0.5)
+            # Agents get reward for all plants harvested in their env
+            self.rewards += harvested_plants\
                 .view(self.num_envs, -1).sum(dim=1) \
                 .repeat_interleave(self.num_agents) \
                 .float()
-            self.treasure[found_treasure] = 1
+            self.plants[harvested_plants] = 1
 
-        # Refresh treasure
+        # Refresh plants
         # But only if an agent is not standing on it already
         _agents = self.agents.view(self.num_envs, self.num_agents, self.height, self.width).sum(dim=1, keepdim=True)
-        self.treasure[self.treasure.gt(0.5) & (~_agents.gt(0.5))] += 1
-        self.treasure.clamp_(0, self.treasure_refresh_rate + 1)
+        self.plants[self.plants.gt(0.5) & (~_agents.gt(0.5))] += 1
+        self.plants.clamp_(0, self.refresh_rate + 1)
 
         self.env_lifetimes += 1
         if return_observations:
@@ -246,7 +248,7 @@ class TreasureHunt(MultiagentVecEnv):
         if torch.any(done):
             num_done = done.sum().item()
             agent_dones = done.repeat_interleave(self.num_agents)
-            new_agents, new_orientations, new_dones, new_hp, new_pathing, new_respawns, new_treasure = \
+            new_agents, new_orientations, new_dones, new_hp, new_pathing, new_respawns, new_plants = \
                 self._create_envs(num_done)
             self.agents[agent_dones] = new_agents
             self.orientations[agent_dones] = new_orientations
@@ -255,7 +257,7 @@ class TreasureHunt(MultiagentVecEnv):
             # If we are using a fixed MapGenerator these lines won't do anything
             self.pathing[done] = new_pathing
             self.respawns[done] = new_respawns
-            self.treasure[done] = new_treasure
+            self.plants[done] = new_plants
 
             self.env_lifetimes[done] = 0
 
@@ -322,17 +324,17 @@ class TreasureHunt(MultiagentVecEnv):
             else:
                 warnings.warn(msg)
 
-        # Treasure overlap
-        agent_treasure_overlap = self.treasure.repeat_interleave(self.num_agents, 0).gt(self.treasure_refresh_rate+0.5) & self.agents.gt(0.5)
-        if torch.any(agent_treasure_overlap):
-            bad_envs = agent_treasure_overlap.view(self.num_envs * self.num_agents, -1).any(dim=1)
-            msg = 'Agent-treasure overlap in {} envs.'.format(bad_envs.sum().item())
+        # Plant overlap
+        agent_plant_overlap = self.plants.repeat_interleave(self.num_agents, 0).gt(self.refresh_rate + 0.5) & self.agents.gt(0.5)
+        if torch.any(agent_plant_overlap):
+            bad_envs = agent_plant_overlap.view(self.num_envs * self.num_agents, -1).any(dim=1)
+            msg = 'Agent-plant overlap in {} envs.'.format(bad_envs.sum().item())
             if self.strict:
                 raise RuntimeError(msg)
             else:
                 warnings.warn(msg)
 
-        # Can only get reward when digging
+        # Can only get reward when harvesting
 
         # Max reward per step is 1
         impossible_rewards = self.rewards.gt(1 + EPS)
@@ -409,7 +411,7 @@ class TreasureHunt(MultiagentVecEnv):
         map = self.map_generator.generate(num_envs)
         respawns = map.respawn
         pathing = map.pathing
-        treasure = map.treasure * (self.treasure_refresh_rate + 1)
+        plants = map.plants * (self.refresh_rate + 1)
 
         agents = torch.zeros((num_envs * self.num_agents, 1, self.height, self.width), dtype=self.dtype,
                              device=self.device, requires_grad=False)
@@ -441,12 +443,14 @@ class TreasureHunt(MultiagentVecEnv):
             hp[first_done_per_env] = self.initial_hp
             dones[first_done_per_env] = sucessfully_respawned
 
-        return agents, orientations, dones, hp, pathing, respawns, treasure
+        return agents, orientations, dones, hp, pathing, respawns, plants
 
     def _get_env_images(self) -> torch.Tensor:
         t0 = time()
-        # Black background
+        # Default tile is grass
         img = torch.zeros((self.num_envs, 3, self.height, self.width), device=self.device, dtype=torch.short)
+        for i in range(3):
+            img[:, i, :, :] = self.grass_colour[i]
 
         # Add slight highlight for orientation
         locations = (self.agents > 0.5).float()
@@ -463,12 +467,12 @@ class TreasureHunt(MultiagentVecEnv):
             .short()
         img += orientation_highlights.expand_as(img)
 
-        # Add treasure
-        per_env_treasure = self.treasure.reshape(self.num_envs, 1, self.height, self.width).sum(dim=1).gt(self.treasure_refresh_rate+0.5)
+        # Add plants
+        per_env_plants = self.plants.reshape(self.num_envs, 1, self.height, self.width).sum(dim=1).gt(self.refresh_rate + 0.5)
         # Convert to NHWC axes for easier indexing here
         img = img.permute((0, 2, 3, 1))
-        laser_colour = torch.tensor([127, 127, 31], device=self.device, dtype=torch.short)
-        img[per_env_treasure] = laser_colour
+        plant_colour = torch.tensor(self.plant_colour, device=self.device, dtype=torch.short)
+        img[per_env_plants] = plant_colour
         # Convert back to NCHW axes
         img = img.permute((0, 3, 1, 2))
 
@@ -477,6 +481,8 @@ class TreasureHunt(MultiagentVecEnv):
             .view(self.num_envs, self.num_agents, 3, self.height, self.width) \
             .sum(dim=1) \
             .short()
+        agent_body_mask = body_colours.gt(0).any(dim=1, keepdim=True).expand_as(img)
+        img[agent_body_mask] = 0
         img += body_colours
 
         # Walls are grey

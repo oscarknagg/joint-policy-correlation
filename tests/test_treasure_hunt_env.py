@@ -3,26 +3,26 @@ import torch
 from time import sleep
 import matplotlib.pyplot as plt
 
-from multigrid.envs import TreasureHunt
-from multigrid.envs.treasure_hunt import maps
+from multigrid.envs import Harvest
+from multigrid.envs.harvest import maps
 from multigrid.envs.maps import parse_mapstring, FixedMapGenerator
 from multigrid import observations
 from config import DEFAULT_DEVICE
 
 
-render_envs = False
+render_envs = True
 size = 9
 render_sleep = 0.4
 # render_sleep = 1
 torch.random.manual_seed(3)
 
 
-def get_test_env(num_envs=2, treasure_refresh_rate=10):
+def get_test_env(num_envs=2, refresh_rate=10):
     # Same as maps.maps.small2 map from the Deepmind paper
-    env = TreasureHunt(num_envs, 2, height=size, width=size,
-                       map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE),
-                       manual_setup=True, colour_mode='fixed', strict=True, device=DEFAULT_DEVICE,
-                       treasure_refresh_rate=treasure_refresh_rate)
+    env = Harvest(num_envs, 2, height=size, width=size,
+                  map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE),
+                  manual_setup=True, colour_mode='fixed', strict=True, device=DEFAULT_DEVICE,
+                  refresh_rate=refresh_rate)
 
     for i in range(num_envs):
         env.agents[2*i, :, 1, 1] = 1
@@ -48,11 +48,11 @@ def get_test_env(num_envs=2, treasure_refresh_rate=10):
     env.respawns[:, :, 7, 1] = 1
     env.respawns[:, :, 7, 7] = 1
 
-    env.treasure = torch.zeros((num_envs, 1, size, size), dtype=torch.uint8, device=DEFAULT_DEVICE, requires_grad=False)
-    env.treasure[:, :, 1, 3] = env.treasure_refresh_rate + 1
-    env.treasure[:, :, 3, 6] = env.treasure_refresh_rate + 1
-    env.treasure[:, :, 5, 2] = env.treasure_refresh_rate + 1
-    env.treasure[:, :, 7, 5] = env.treasure_refresh_rate + 1
+    env.plants = torch.zeros((num_envs, 1, size, size), dtype=torch.uint8, device=DEFAULT_DEVICE, requires_grad=False)
+    env.plants[:, :, 1, 3] = env.refresh_rate + 1
+    env.plants[:, :, 3, 6] = env.refresh_rate + 1
+    env.plants[:, :, 5, 2] = env.refresh_rate + 1
+    env.plants[:, :, 7, 5] = env.refresh_rate + 1
 
     return env
 
@@ -92,7 +92,7 @@ def _test_action_sequence(test_fixture, env, all_actions, expected_orientations=
         env.reset()
 
 
-class TestTreasureHunt(unittest.TestCase):
+class TestHarvestEnv(unittest.TestCase):
     def test_random_actions(self):
         """Tests a very large number of random actions and checks for environment consistency
         instead of any particular expected trajectory."""
@@ -107,10 +107,10 @@ class TestTreasureHunt(unittest.TestCase):
             side=4,
             padding_value=127
         )
-        env = TreasureHunt(num_envs=num_envs, num_agents=2, height=9, width=9, verbose=False,
-                       map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE), observation_fn=obs_fn,
-                       render_args={'num_rows': 3, 'num_cols': 3, 'size': 256},
-                       device=DEFAULT_DEVICE, strict=True)
+        env = Harvest(num_envs=num_envs, num_agents=2, height=9, width=9, verbose=False,
+                     map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE), observation_fn=obs_fn,
+                     render_args={'num_rows': 3, 'num_cols': 3, 'size': 256},
+                     device=DEFAULT_DEVICE, strict=True)
         all_actions = {
             f'agent_{i}': torch.randint(env.num_actions, size=(num_steps, num_envs)).long().to(DEFAULT_DEVICE) for i in
             range(num_agents)
@@ -118,7 +118,7 @@ class TestTreasureHunt(unittest.TestCase):
 
         _test_action_sequence(self, env, all_actions)
 
-    def test_dig(self):
+    def test_harvest(self):
         env = get_test_env(num_envs=1)
         all_actions = {
             'agent_0': torch.tensor([2, 3, 3, 0, 0, 7, 0]).unsqueeze(1).long().to(DEFAULT_DEVICE),
@@ -131,8 +131,8 @@ class TestTreasureHunt(unittest.TestCase):
 
         _test_action_sequence(self, env, all_actions, expected_reward=expected_reward)
 
-    def test_treasure_respawn(self):
-        env = get_test_env(num_envs=1, treasure_refresh_rate=2)
+    def test_plant_respawn(self):
+        env = get_test_env(num_envs=1, refresh_rate=2)
         all_actions = {
             'agent_0': torch.tensor([2, 3, 3, 0, 7, 0, 7, 7, 0]).unsqueeze(1).long().to(DEFAULT_DEVICE),
             'agent_1': torch.tensor([3, 3, 3, 0, 7, 0, 7, 7, 0]).unsqueeze(1).long().to(DEFAULT_DEVICE),
@@ -145,10 +145,21 @@ class TestTreasureHunt(unittest.TestCase):
         _test_action_sequence(self, env, all_actions, expected_reward=expected_reward)
 
     def test_observations(self):
-        obs_fn = observations.RenderObservations()
-        env = TreasureHunt(num_envs=1, num_agents=2, height=9, width=9,
-                           map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE),
-                           observation_fn=obs_fn, device=DEFAULT_DEVICE, strict=True)
+        # obs_fn = observations.RenderObservations()
+        obs_fn = observations.FirstPersonCrop(
+            first_person_rotation=True,
+            in_front=9,
+            behind=2,
+            side=5,
+            padding_value=127
+        )
+        # env = Harvest(num_envs=1, num_agents=2, height=9, width=9,
+        #                    map_generator=FixedMapGenerator(parse_mapstring(maps.small2), DEFAULT_DEVICE),
+        #                    observation_fn=obs_fn, device=DEFAULT_DEVICE, strict=True)
+
+        env = Harvest(num_envs=1, num_agents=2, height=9, width=16,
+                     map_generator=FixedMapGenerator(parse_mapstring(maps.small3), DEFAULT_DEVICE),
+                     observation_fn=obs_fn, device=DEFAULT_DEVICE, strict=True)
 
         agent_obs = obs_fn.observe(env)
         for agent, obs in agent_obs.items():

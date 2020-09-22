@@ -4,16 +4,15 @@ import numpy as np
 import torch
 
 from multigrid.envs.laser_tag.maps import MAPS as LASER_TAG_MAPS
-from multigrid.envs.treasure_hunt.maps import MAPS as TREASURE_HUNT_MAPS
+from multigrid.envs.harvest.maps import MAPS as HARVEST_MAPS
 from multigrid.envs.maps.procedural import generate_random_mazes, generate_random_respawns
 
 
 handcrafted_maps = {
     'laser_tag': LASER_TAG_MAPS,
-    'treasure_hunt': TREASURE_HUNT_MAPS,
+    'harvest': HARVEST_MAPS,
     # Aliases
     'laser': LASER_TAG_MAPS,
-    'treasure': TREASURE_HUNT_MAPS,
 }
 
 
@@ -40,7 +39,7 @@ def parse_mapstring(mapstring: Union[str, List[str]], map_symbols: Optional[Dict
         mapstring = handcrafted_maps[env][map_name]
 
     if map_symbols is None:
-        map_symbols = {'*': 'pathing', 'P': 'respawn', 'T': 'treasure'}
+        map_symbols = {'*': 'pathing', 'P': 'respawn', 'T': 'plants'}
 
     # Get height and width
     height = len(mapstring)

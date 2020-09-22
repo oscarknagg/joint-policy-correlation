@@ -84,7 +84,7 @@ if __name__ == '__main__':
     parser = arguments.add_observation_arguments(parser)
     parser = arguments.add_snake_env_arguments(parser)
     parser = arguments.add_laser_tag_env_arguments(parser)
-    parser = arguments.add_treasure_hunt_env_arguments(parser)
+    parser = arguments.add_harvest_env_arguments(parser)
     parser = arguments.add_render_arguments(parser)
     parser = arguments.add_output_arguments(parser)
     args = parser.parse_args()

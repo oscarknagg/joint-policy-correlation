@@ -4,7 +4,7 @@ from typing import List, Optional, Dict
 import os
 import torch
 
-from multigrid.envs import LaserTag, Slither, TreasureHunt
+from multigrid.envs import LaserTag, Slither, Harvest
 from multigrid.envs.maps import parse_mapstring, MapPool, Random, maps_from_file, FixedMapGenerator
 from multigrid.observations import ObservationFunction
 from multigrid import rl
@@ -119,9 +119,9 @@ def add_laser_tag_env_arguments(parser: argparse.ArgumentParser) -> argparse.Arg
     return parser
 
 
-def add_treasure_hunt_env_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-    parser.add_argument('--treasure-file', type=str)
-    parser.add_argument('--treasure-refresh', type=int, default=20)
+def add_harvest_env_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    parser.add_argument('--harvest-file', type=str)
+    parser.add_argument('--harvest-refresh', type=int, default=50)
     return parser
 
 
@@ -158,7 +158,11 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
         'num_rows': args.render_rows,
         'num_cols': args.render_cols,
     }
+    # Pre-process map name (kind of a hack to help identify which "small2" map we're
+    # referring to in the arguments)
+    args.env_map = [f'{args.env}-{m}' for m in args.env_map]
     if args.env == 'snake':
+        args.env_map = [f'snake-{m}' for m in args.env_map]
         env = Slither(num_envs=args.n_envs, num_agents=args.n_agents, food_on_death_prob=args.food_on_death,
                       height=args.height, width=args.width, device=device, render_args=render_args,
                       boost=args.boost,
@@ -184,7 +188,7 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
         env = LaserTag(num_envs=args.n_envs, num_agents=args.n_agents, height=args.height, width=args.width,
                        observation_fn=observation_fn, colour_mode=args.colour_mode,
                        map_generator=map_generator, device=device, render_args=render_args, strict=args.strict)
-    elif args.env == 'treasure':
+    elif args.env == 'harvest':
         if len(args.env_map) == 1:
             if args.env_map[0] == 'random':
                 # Generate n_maps random mazes to select from at random during each map reset
@@ -192,7 +196,7 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
                                        args.maze_density, args.device)
             elif args.env_map[0] == 'from_file':
                 maps = maps_from_file(args.pathing_file, args.respawn_file, args.device, args.n_maps,
-                                      other_tensors={'treasure': args.treasure_file})
+                                      other_tensors={'harvest': args.harvest_file})
                 map_generator = MapPool(maps)
             else:
                 # Single fixed map
@@ -201,9 +205,9 @@ def get_env(args: argparse.Namespace, observation_fn: ObservationFunction, devic
             fixed_maps = [parse_mapstring(m) for m in args.env_map]
             map_generator = MapPool(fixed_maps)
 
-        env = TreasureHunt(num_envs=args.n_envs, num_agents=args.n_agents, height=args.height, width=args.width,
-                           observation_fn=observation_fn, colour_mode=args.colour_mode, treasure_refresh_rate=args.treasure_refresh,
-                           map_generator=map_generator, device=device, render_args=render_args, strict=args.strict)
+        env = Harvest(num_envs=args.n_envs, num_agents=args.n_agents, height=args.height, width=args.width,
+                      observation_fn=observation_fn, colour_mode=args.colour_mode, refresh_rate=args.harvest_refresh,
+                      map_generator=map_generator, device=device, render_args=render_args, strict=args.strict)
 
     elif args.env == 'asymmetric':
         raise NotImplementedError
