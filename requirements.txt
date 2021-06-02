@@ -73,7 +73,7 @@ torch==1.1.0
 torchvision==0.2.2.post3
 tornado==6.0.3
 traitlets==4.3.2
-urllib3==1.25.2
+urllib3==1.26.5
 wcwidth==0.1.7
 webencodings==0.5.1
 widgetsnbextension==3.5.0
